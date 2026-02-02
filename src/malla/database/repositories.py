@@ -1170,6 +1170,42 @@ class NodeRepository:
             if node_id <= 0:
                 return None
 
+            telemetry_info = None
+            telemetry_query = """
+            SELECT
+                temperature,
+                humidity,
+                pressure,
+                battery_level,
+                voltage,
+                last_updated
+            FROM node_telemetry_latest
+            WHERE node_id = %s
+            """
+            cursor.execute(telemetry_query, (node_id,))
+            telemetry_row = cursor.fetchone()
+            if telemetry_row:
+                last_updated = telemetry_row["last_updated"]
+                if last_updated and last_updated.tzinfo is None:
+                    last_updated = last_updated.replace(tzinfo=UTC)
+
+                telemetry_info = {
+                    "temperature": telemetry_row["temperature"],
+                    "humidity": telemetry_row["humidity"],
+                    "pressure": telemetry_row["pressure"],
+                    "battery_level": telemetry_row["battery_level"],
+                    "voltage": telemetry_row["voltage"],
+                    "last_updated": last_updated.strftime("%Y-%m-%d %H:%M:%S UTC")
+                    if last_updated
+                    else None,
+                    "last_updated_timestamp": last_updated.timestamp()
+                    if last_updated
+                    else None,
+                    "last_updated_relative": format_time_ago(last_updated)
+                    if last_updated
+                    else None,
+                }
+
             # Get basic node information from packet_history with node_info join
             query = """
             SELECT
@@ -1238,6 +1274,7 @@ class NodeRepository:
                     "recent_packets": [],
                     "protocols": [],
                     "received_gateways": [],
+                    "telemetry": telemetry_info,
                     "location": None,
                 }
 
@@ -1911,6 +1948,7 @@ class NodeRepository:
                 "protocols": protocols,
                 "received_gateways": received_gateways,
                 "matrix_gateways": matrix_gateways,
+                "telemetry": telemetry_info,
                 "location": location_info,
             }
 

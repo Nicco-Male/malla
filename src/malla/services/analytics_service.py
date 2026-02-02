@@ -27,6 +27,180 @@ class AnalyticsService:
     _CACHE_TTL_SEC: int = 60  # one minute cache window
 
     @staticmethod
+    def _decode_telemetry_payload(
+        raw_payload: bytes | memoryview,
+    ) -> dict[str, float]:
+        """Decode a telemetry payload into metric values."""
+        try:
+            from meshtastic import telemetry_pb2
+        except ImportError:
+            logger.warning(
+                "meshtastic protobuf not available, cannot decode telemetry"
+            )
+            return {}
+
+        if isinstance(raw_payload, memoryview):
+            raw_payload = bytes(raw_payload)
+        if not isinstance(raw_payload, bytes):
+            return {}
+
+        telemetry = telemetry_pb2.Telemetry()
+        try:
+            telemetry.ParseFromString(raw_payload)
+        except Exception as exc:
+            logger.debug(f"Failed to decode telemetry payload: {exc}")
+            return {}
+
+        metrics: dict[str, float] = {}
+
+        if telemetry.HasField("environment_metrics"):
+            env_metrics = telemetry.environment_metrics
+            if env_metrics.HasField("temperature"):
+                metrics["temperature"] = float(env_metrics.temperature)
+            if env_metrics.HasField("relative_humidity"):
+                metrics["humidity"] = float(env_metrics.relative_humidity)
+            if env_metrics.HasField("barometric_pressure"):
+                metrics["pressure"] = float(env_metrics.barometric_pressure)
+
+        if telemetry.HasField("device_metrics"):
+            device_metrics = telemetry.device_metrics
+            if device_metrics.HasField("battery_level"):
+                metrics["battery_level"] = float(device_metrics.battery_level)
+            if device_metrics.HasField("voltage"):
+                metrics["voltage"] = float(device_metrics.voltage) / 1000.0
+
+        return metrics
+
+    @staticmethod
+    def get_node_telemetry_history(
+        node_id: int,
+        start_timestamp: float,
+        end_timestamp: float,
+        bucket_seconds: int | None = None,
+    ) -> dict[str, Any]:
+        """Get decoded telemetry history for a node."""
+        from ..database.connection import get_db_connection, put_db_connection
+
+        query = """
+            SELECT
+                ph.timestamp,
+                ph.raw_payload
+            FROM packet_history ph
+            WHERE ph.from_node_id = %s
+              AND ph.timestamp >= %s
+              AND ph.timestamp <= %s
+              AND ph.portnum_name = 'TELEMETRY_APP'
+              AND ph.raw_payload IS NOT NULL
+            ORDER BY ph.timestamp ASC
+        """
+
+        conn = None
+        cursor = None
+        try:
+            conn = get_db_connection()
+            cursor = conn.cursor(cursor_factory=RealDictCursor)
+            cursor.execute(query, (node_id, start_timestamp, end_timestamp))
+            rows = cursor.fetchall() or []
+        finally:
+            if cursor:
+                cursor.close()
+            if conn:
+                try:
+                    put_db_connection(conn)
+                except Exception:
+                    try:
+                        conn.close()
+                    except Exception:
+                        pass
+
+        metric_keys = [
+            "temperature",
+            "humidity",
+            "pressure",
+            "battery_level",
+            "voltage",
+        ]
+        series: dict[str, list[dict[str, float]]] = {key: [] for key in metric_keys}
+        stats_totals: dict[str, dict[str, float]] = {
+            key: {"sum": 0.0, "min": float("inf"), "max": float("-inf"), "count": 0}
+            for key in metric_keys
+        }
+
+        bucketed: dict[int, dict[str, dict[str, float]]] = {}
+
+        for row in rows:
+            raw_payload = row.get("raw_payload")
+            if not raw_payload:
+                continue
+
+            metrics = AnalyticsService._decode_telemetry_payload(raw_payload)
+            if not metrics:
+                continue
+
+            timestamp = float(row["timestamp"])
+
+            for key, value in metrics.items():
+                if key not in stats_totals:
+                    continue
+                stats = stats_totals[key]
+                stats["sum"] += float(value)
+                stats["count"] += 1
+                stats["min"] = min(stats["min"], float(value))
+                stats["max"] = max(stats["max"], float(value))
+
+            if bucket_seconds:
+                bucket_timestamp = int(timestamp // bucket_seconds * bucket_seconds)
+                bucket_metrics = bucketed.setdefault(bucket_timestamp, {})
+                for key, value in metrics.items():
+                    bucket_entry = bucket_metrics.setdefault(
+                        key, {"sum": 0.0, "count": 0.0}
+                    )
+                    bucket_entry["sum"] += float(value)
+                    bucket_entry["count"] += 1
+            else:
+                for key, value in metrics.items():
+                    series[key].append({"timestamp": timestamp, "value": float(value)})
+
+        if bucket_seconds:
+            for bucket_timestamp in sorted(bucketed.keys()):
+                metrics = bucketed[bucket_timestamp]
+                for key, data in metrics.items():
+                    if data["count"] <= 0:
+                        continue
+                    series[key].append(
+                        {
+                            "timestamp": float(bucket_timestamp),
+                            "value": data["sum"] / data["count"],
+                        }
+                    )
+
+        stats_summary: dict[str, dict[str, float | int | None]] = {}
+        for key, stats in stats_totals.items():
+            if stats["count"] > 0:
+                stats_summary[key] = {
+                    "avg": stats["sum"] / stats["count"],
+                    "min": stats["min"],
+                    "max": stats["max"],
+                    "count": int(stats["count"]),
+                }
+            else:
+                stats_summary[key] = {
+                    "avg": None,
+                    "min": None,
+                    "max": None,
+                    "count": 0,
+                }
+
+        return {
+            "node_id": node_id,
+            "from": start_timestamp,
+            "to": end_timestamp,
+            "bucket": bucket_seconds,
+            "series": series,
+            "stats": stats_summary,
+        }
+
+    @staticmethod
     def get_analytics_data(
         gateway_id: str | None = None,
         from_node: int | None = None,

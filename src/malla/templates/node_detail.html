@@ -228,6 +228,162 @@
                 </div>
             </div>
 
+            <!-- Telemetry -->
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5><i class="bi bi-activity"></i> Telemetry</h5>
+                </div>
+                <div class="card-body">
+                    <table class="table table-sm">
+                        <tr>
+                            <th>Temperature:</th>
+                            <td>
+                                {% if telemetry and telemetry.temperature is not none %}
+                                    {{ "%.1f"|format(telemetry.temperature) }}°C
+                                {% else %}
+                                    <span class="text-muted">Unknown</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        <tr>
+                            <th>Humidity:</th>
+                            <td>
+                                {% if telemetry and telemetry.humidity is not none %}
+                                    {{ "%.1f"|format(telemetry.humidity) }}%
+                                {% else %}
+                                    <span class="text-muted">Unknown</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        <tr>
+                            <th>Pressure:</th>
+                            <td>
+                                {% if telemetry and telemetry.pressure is not none %}
+                                    {{ "%.1f"|format(telemetry.pressure) }} hPa
+                                {% else %}
+                                    <span class="text-muted">Unknown</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        <tr>
+                            <th>Battery Level:</th>
+                            <td>
+                                {% if telemetry and telemetry.battery_level is not none %}
+                                    {{ telemetry.battery_level }}%
+                                {% else %}
+                                    <span class="text-muted">Unknown</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        <tr>
+                            <th>Voltage:</th>
+                            <td>
+                                {% if telemetry and telemetry.voltage is not none %}
+                                    {{ "%.2f"|format(telemetry.voltage) }} V
+                                {% else %}
+                                    <span class="text-muted">Unknown</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        <tr>
+                            <th>Last updated:</th>
+                            <td>
+                                {% if telemetry and telemetry.last_updated_timestamp %}
+                                    <span class="timestamp-display" data-timestamp="{{ telemetry.last_updated_timestamp }}">{{ telemetry.last_updated }}</span>
+                                {% else %}
+                                    <span class="text-muted">-</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Telemetry History -->
+            <div class="card mb-4">
+                <div class="card-header d-flex flex-wrap gap-3 justify-content-between align-items-center">
+                    <div>
+                        <h5 class="mb-1"><i class="bi bi-graph-up"></i> Telemetry History</h5>
+                        <small class="text-muted">Temperature, humidity, pressure, battery, voltage over time</small>
+                    </div>
+                    <div class="d-flex flex-wrap align-items-center gap-2">
+                        <label class="text-muted small mb-0" for="telemetryRange">Range:</label>
+                        <select class="form-select form-select-sm" id="telemetryRange" style="width: auto;">
+                            <option value="24" selected>24h</option>
+                            <option value="168">7d</option>
+                            <option value="720">30d</option>
+                            <option value="custom">Custom</option>
+                        </select>
+                        <select class="form-select form-select-sm" id="telemetryBucket" style="width: auto;">
+                            <option value="">Auto bucket</option>
+                            <option value="5m">5m</option>
+                            <option value="15m">15m</option>
+                            <option value="1h">1h</option>
+                            <option value="6h">6h</option>
+                            <option value="1d">1d</option>
+                        </select>
+                        <div id="telemetryCustomRange" class="d-flex flex-wrap align-items-center gap-2" style="display: none;">
+                            <input type="datetime-local" class="form-control form-control-sm" id="telemetryFrom">
+                            <span class="text-muted small">to</span>
+                            <input type="datetime-local" class="form-control form-control-sm" id="telemetryTo">
+                            <button class="btn btn-sm btn-outline-primary" id="telemetryApply">Apply</button>
+                        </div>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div class="row g-3 mb-4">
+                        <div class="col-sm-6 col-lg-4">
+                            <div class="card card-metric h-100">
+                                <div class="card-body">
+                                    <div class="metric-value" id="telemetryAvgTemperature">-</div>
+                                    <div class="metric-label">Avg Temperature</div>
+                                    <small class="text-muted" id="telemetryRangeTemperature">Min/Max: -</small>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-sm-6 col-lg-4">
+                            <div class="card card-metric h-100">
+                                <div class="card-body">
+                                    <div class="metric-value" id="telemetryAvgHumidity">-</div>
+                                    <div class="metric-label">Avg Humidity</div>
+                                    <small class="text-muted" id="telemetryRangeHumidity">Min/Max: -</small>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-sm-6 col-lg-4">
+                            <div class="card card-metric h-100">
+                                <div class="card-body">
+                                    <div class="metric-value" id="telemetryAvgPressure">-</div>
+                                    <div class="metric-label">Avg Pressure</div>
+                                    <small class="text-muted" id="telemetryRangePressure">Min/Max: -</small>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-sm-6 col-lg-4">
+                            <div class="card card-metric h-100">
+                                <div class="card-body">
+                                    <div class="metric-value" id="telemetryAvgBattery">-</div>
+                                    <div class="metric-label">Avg Battery</div>
+                                    <small class="text-muted" id="telemetryRangeBattery">Min/Max: -</small>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-sm-6 col-lg-4">
+                            <div class="card card-metric h-100">
+                                <div class="card-body">
+                                    <div class="metric-value" id="telemetryAvgVoltage">-</div>
+                                    <div class="metric-label">Avg Voltage</div>
+                                    <small class="text-muted" id="telemetryRangeVoltage">Min/Max: -</small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="chart-container" id="telemetryHistoryChartContainer" style="position: relative; height: 320px;">
+                        <canvas id="telemetryHistoryChart"></canvas>
+                    </div>
+                </div>
+            </div>
+
             <!-- Location Information -->
             {% if location %}
             <div class="card mb-4">
@@ -969,5 +1125,319 @@ document.addEventListener('DOMContentLoaded', function() {
         updateAllTimestamps();
     }
 });
+</script>
+
+<script>
+(() => {
+    const scriptTag = document.querySelector('script[data-node-id]');
+    const nodeId = scriptTag ? scriptTag.getAttribute('data-node-id') : null;
+    const telemetryRange = document.getElementById('telemetryRange');
+    const telemetryBucket = document.getElementById('telemetryBucket');
+    const telemetryCustomRange = document.getElementById('telemetryCustomRange');
+    const telemetryApply = document.getElementById('telemetryApply');
+    const telemetryFrom = document.getElementById('telemetryFrom');
+    const telemetryTo = document.getElementById('telemetryTo');
+    const chartContainer = document.getElementById('telemetryHistoryChartContainer');
+
+    if (!nodeId || !telemetryRange || !chartContainer) {
+        return;
+    }
+
+    const computedStyle = getComputedStyle(document.documentElement);
+    const palette = {
+        primary: computedStyle.getPropertyValue('--bs-primary').trim() || '#0d6efd',
+        success: computedStyle.getPropertyValue('--bs-success').trim() || '#198754',
+        warning: computedStyle.getPropertyValue('--bs-warning').trim() || '#ffc107',
+        info: computedStyle.getPropertyValue('--bs-info').trim() || '#0dcaf0',
+        danger: computedStyle.getPropertyValue('--bs-danger').trim() || '#dc3545'
+    };
+
+    const telemetryMetrics = [
+        { key: 'temperature', label: 'Temperature', unit: '°C', color: palette.danger, decimals: 1 },
+        { key: 'humidity', label: 'Humidity', unit: '%', color: palette.info, decimals: 1 },
+        { key: 'pressure', label: 'Pressure', unit: 'hPa', color: palette.primary, decimals: 1 },
+        { key: 'battery_level', label: 'Battery', unit: '%', color: palette.success, decimals: 0 },
+        { key: 'voltage', label: 'Voltage', unit: 'V', color: palette.warning, decimals: 2 }
+    ];
+
+    const telemetryStatElements = {
+        temperature: {
+            avg: document.getElementById('telemetryAvgTemperature'),
+            range: document.getElementById('telemetryRangeTemperature')
+        },
+        humidity: {
+            avg: document.getElementById('telemetryAvgHumidity'),
+            range: document.getElementById('telemetryRangeHumidity')
+        },
+        pressure: {
+            avg: document.getElementById('telemetryAvgPressure'),
+            range: document.getElementById('telemetryRangePressure')
+        },
+        battery_level: {
+            avg: document.getElementById('telemetryAvgBattery'),
+            range: document.getElementById('telemetryRangeBattery')
+        },
+        voltage: {
+            avg: document.getElementById('telemetryAvgVoltage'),
+            range: document.getElementById('telemetryRangeVoltage')
+        }
+    };
+
+    const telemetryChartState = {
+        chart: null
+    };
+
+    function formatMetricValue(metricKey, value, decimals, unit) {
+        if (value === null || value === undefined || Number.isNaN(value)) {
+            return '-';
+        }
+        const rounded = Number.parseFloat(value).toFixed(decimals);
+        return `${rounded}${unit}`;
+    }
+
+    function updateTelemetryStats(stats) {
+        telemetryMetrics.forEach(metric => {
+            const elements = telemetryStatElements[metric.key];
+            if (!elements) {
+                return;
+            }
+            const metricStats = stats ? stats[metric.key] : null;
+            if (!metricStats || !metricStats.count) {
+                elements.avg.textContent = '-';
+                elements.range.textContent = 'Min/Max: -';
+                return;
+            }
+            elements.avg.textContent = formatMetricValue(
+                metric.key,
+                metricStats.avg,
+                metric.decimals,
+                metric.unit
+            );
+            const minValue = formatMetricValue(
+                metric.key,
+                metricStats.min,
+                metric.decimals,
+                metric.unit
+            );
+            const maxValue = formatMetricValue(
+                metric.key,
+                metricStats.max,
+                metric.decimals,
+                metric.unit
+            );
+            elements.range.textContent = `Min/Max: ${minValue} / ${maxValue}`;
+        });
+    }
+
+    function showTelemetryMessage(message) {
+        if (telemetryChartState.chart) {
+            telemetryChartState.chart.destroy();
+            telemetryChartState.chart = null;
+        }
+        chartContainer.innerHTML = `
+            <div class="d-flex align-items-center justify-content-center h-100 text-muted">
+                ${message}
+            </div>
+        `;
+    }
+
+    function resetTelemetryChartContainer() {
+        if (telemetryChartState.chart) {
+            telemetryChartState.chart.destroy();
+            telemetryChartState.chart = null;
+        }
+        chartContainer.innerHTML = '<canvas id="telemetryHistoryChart"></canvas>';
+        return document.getElementById('telemetryHistoryChart');
+    }
+
+    function formatTimestamp(value) {
+        if (!value) {
+            return '';
+        }
+        return new Date(value).toLocaleString();
+    }
+
+    function resolveAutoBucket(hours) {
+        if (hours <= 24) {
+            return '5m';
+        }
+        if (hours <= 168) {
+            return '1h';
+        }
+        if (hours <= 720) {
+            return '6h';
+        }
+        return '1d';
+    }
+
+    function getSelectedRange() {
+        const rangeValue = telemetryRange.value;
+        if (rangeValue === 'custom') {
+            const fromValue = telemetryFrom.value;
+            const toValue = telemetryTo.value;
+            if (!fromValue || !toValue) {
+                return null;
+            }
+            const fromTs = new Date(fromValue).getTime() / 1000;
+            const toTs = new Date(toValue).getTime() / 1000;
+            if (!Number.isFinite(fromTs) || !Number.isFinite(toTs) || toTs <= fromTs) {
+                return null;
+            }
+            return { type: 'custom', from: fromTs, to: toTs, hours: (toTs - fromTs) / 3600 };
+        }
+        const hours = Number.parseInt(rangeValue, 10);
+        if (!Number.isFinite(hours) || hours <= 0) {
+            return null;
+        }
+        return { type: 'hours', hours };
+    }
+
+    async function loadTelemetryHistory() {
+        if (!nodeId) {
+            return;
+        }
+
+        const range = getSelectedRange();
+        if (!range) {
+            showTelemetryMessage('Select a valid time range to view telemetry history.');
+            updateTelemetryStats({});
+            return;
+        }
+
+        const url = new URL(`/api/node/${nodeId}/telemetry-history`, window.location.origin);
+        let rangeHours = range.hours || 0;
+        if (range.type === 'custom') {
+            url.searchParams.set('from', range.from.toString());
+            url.searchParams.set('to', range.to.toString());
+        } else {
+            url.searchParams.set('hours', range.hours.toString());
+        }
+
+        const bucketSelection = telemetryBucket ? telemetryBucket.value : '';
+        const bucketValue = bucketSelection || resolveAutoBucket(rangeHours);
+        if (bucketValue) {
+            url.searchParams.set('bucket', bucketValue);
+        }
+
+        try {
+            const response = await fetch(url.toString());
+            const data = await response.json();
+
+            if (!response.ok || data.error) {
+                throw new Error(data.error || 'Failed to load telemetry history');
+            }
+
+            updateTelemetryStats(data.stats || {});
+
+            const hasData = telemetryMetrics.some(metric => {
+                const series = data.series ? data.series[metric.key] : [];
+                return Array.isArray(series) && series.length > 0;
+            });
+
+            if (!hasData) {
+                showTelemetryMessage('No telemetry history available for this range.');
+                return;
+            }
+
+            const canvas = resetTelemetryChartContainer();
+            if (!canvas) {
+                return;
+            }
+
+            if (typeof Chart === 'undefined') {
+                showTelemetryMessage('Chart.js is not available.');
+                return;
+            }
+
+            const datasets = telemetryMetrics.map(metric => {
+                const points = (data.series && data.series[metric.key]) || [];
+                return {
+                    label: metric.label,
+                    data: points.map(point => ({
+                        x: point.timestamp * 1000,
+                        y: point.value
+                    })),
+                    borderColor: metric.color,
+                    backgroundColor: `${metric.color}55`,
+                    tension: 0.25,
+                    fill: false,
+                    pointRadius: 2
+                };
+            });
+
+            const ctx = canvas.getContext('2d');
+            telemetryChartState.chart = new Chart(ctx, {
+                type: 'line',
+                data: { datasets },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { position: 'bottom' },
+                        tooltip: {
+                            callbacks: {
+                                title: (items) => {
+                                    if (!items.length) return '';
+                                    return formatTimestamp(items[0].parsed.x);
+                                },
+                                label: (context) => {
+                                    const metric = telemetryMetrics.find(
+                                        item => item.label === context.dataset.label
+                                    );
+                                    if (!metric) {
+                                        return `${context.dataset.label}: ${context.parsed.y}`;
+                                    }
+                                    const formatted = formatMetricValue(
+                                        metric.key,
+                                        context.parsed.y,
+                                        metric.decimals,
+                                        metric.unit
+                                    );
+                                    return `${metric.label}: ${formatted}`;
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            type: 'linear',
+                            ticks: {
+                                callback: (value) => formatTimestamp(value)
+                            }
+                        },
+                        y: {
+                            beginAtZero: false
+                        }
+                    }
+                }
+            });
+        } catch (error) {
+            console.error('Error loading telemetry history:', error);
+            showTelemetryMessage('Error loading telemetry history.');
+            updateTelemetryStats({});
+        }
+    }
+
+    telemetryRange.addEventListener('change', () => {
+        const isCustom = telemetryRange.value === 'custom';
+        telemetryCustomRange.style.display = isCustom ? 'flex' : 'none';
+        if (!isCustom) {
+            loadTelemetryHistory();
+        }
+    });
+
+    if (telemetryBucket) {
+        telemetryBucket.addEventListener('change', loadTelemetryHistory);
+    }
+
+    if (telemetryApply) {
+        telemetryApply.addEventListener('click', (event) => {
+            event.preventDefault();
+            loadTelemetryHistory();
+        });
+    }
+
+    loadTelemetryHistory();
+})();
 </script>
 {% endblock %}
