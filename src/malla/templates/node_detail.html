@@ -228,6 +228,77 @@
                 </div>
             </div>
 
+            <!-- Telemetry -->
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5><i class="bi bi-activity"></i> Telemetry</h5>
+                </div>
+                <div class="card-body">
+                    <table class="table table-sm">
+                        <tr>
+                            <th>Temperature:</th>
+                            <td>
+                                {% if telemetry and telemetry.temperature is not none %}
+                                    {{ "%.1f"|format(telemetry.temperature) }}°C
+                                {% else %}
+                                    <span class="text-muted">Unknown</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        <tr>
+                            <th>Humidity:</th>
+                            <td>
+                                {% if telemetry and telemetry.humidity is not none %}
+                                    {{ "%.1f"|format(telemetry.humidity) }}%
+                                {% else %}
+                                    <span class="text-muted">Unknown</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        <tr>
+                            <th>Pressure:</th>
+                            <td>
+                                {% if telemetry and telemetry.pressure is not none %}
+                                    {{ "%.1f"|format(telemetry.pressure) }} hPa
+                                {% else %}
+                                    <span class="text-muted">Unknown</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        <tr>
+                            <th>Battery Level:</th>
+                            <td>
+                                {% if telemetry and telemetry.battery_level is not none %}
+                                    {{ telemetry.battery_level }}%
+                                {% else %}
+                                    <span class="text-muted">Unknown</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        <tr>
+                            <th>Voltage:</th>
+                            <td>
+                                {% if telemetry and telemetry.voltage is not none %}
+                                    {{ "%.2f"|format(telemetry.voltage) }} V
+                                {% else %}
+                                    <span class="text-muted">Unknown</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        <tr>
+                            <th>Last updated:</th>
+                            <td>
+                                {% if telemetry and telemetry.last_updated_timestamp %}
+                                    <span class="timestamp-display" data-timestamp="{{ telemetry.last_updated_timestamp }}">{{ telemetry.last_updated }}</span>
+                                {% else %}
+                                    <span class="text-muted">-</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                    </table>
+                </div>
+            </div>
+
             <!-- Location Information -->
             {% if location %}
             <div class="card mb-4">
