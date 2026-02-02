@@ -4,6 +4,7 @@ API routes for the Meshtastic Mesh Health Web UI
 
 import json
 import logging
+import re
 import threading
 import time
 from typing import Any
@@ -2287,6 +2288,71 @@ def api_node_location_history(node_id):
         return jsonify({"error": str(e)}), 400
     except Exception as e:
         logger.error(f"Error in API node location history: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@api_bp.route("/node/<node_id>/telemetry-history")
+def api_node_telemetry_history(node_id):
+    """API endpoint for telemetry history for a node."""
+    logger.info(f"API node telemetry history endpoint accessed for node {node_id}")
+    try:
+        node_id_int = convert_node_id(node_id)
+
+        from_param = request.args.get("from")
+        to_param = request.args.get("to")
+        hours = request.args.get("hours", type=float)
+
+        now_ts = time.time()
+
+        if from_param or to_param:
+            if not from_param or not to_param:
+                return (
+                    jsonify({"error": "Both 'from' and 'to' parameters are required"}),
+                    400,
+                )
+            try:
+                start_ts = float(from_param)
+                end_ts = float(to_param)
+            except ValueError as exc:
+                return jsonify({"error": f"Invalid timestamp: {exc}"}), 400
+        else:
+            if hours is None:
+                hours = 24
+            if hours <= 0:
+                return jsonify({"error": "Hours must be greater than 0"}), 400
+            end_ts = now_ts
+            start_ts = now_ts - hours * 3600
+
+        if end_ts <= start_ts:
+            return jsonify({"error": "'to' must be greater than 'from'"}), 400
+
+        bucket_param = request.args.get("bucket")
+        bucket_seconds = None
+        if bucket_param:
+            match = re.match(r"^(\d+)([smhd])$", bucket_param.strip())
+            if not match:
+                return (
+                    jsonify({"error": "Bucket must be in the format <number><s|m|h|d>"}),
+                    400,
+                )
+            value = int(match.group(1))
+            unit = match.group(2)
+            if value <= 0:
+                return jsonify({"error": "Bucket value must be greater than 0"}), 400
+            multiplier = {"s": 1, "m": 60, "h": 3600, "d": 86400}[unit]
+            bucket_seconds = value * multiplier
+
+        history = AnalyticsService.get_node_telemetry_history(
+            node_id=node_id_int,
+            start_timestamp=start_ts,
+            end_timestamp=end_ts,
+            bucket_seconds=bucket_seconds,
+        )
+        return safe_jsonify(history)
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    except Exception as e:
+        logger.error(f"Error in API node telemetry history: {e}")
         return jsonify({"error": str(e)}), 500
 
 
