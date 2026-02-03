@@ -72,6 +72,18 @@
 4. Verify decryption keys if using secondary channels
 5. Check database for failed packet inserts
 
+### Porte occupate dopo `docker compose down`
+
+**Symptom**: Le porte restano occupate anche dopo `docker compose down`
+
+**Solutions**:
+1. Verifica se ci sono ancora container in esecuzione: `docker ps --filter "label=com.docker.compose.project=<nome_progetto>"`
+2. Rimuovi eventuali container rimasti: `docker rm -f <container>`
+3. Rimuovi le reti del progetto: `docker network ls --filter "label=com.docker.compose.project=<nome_progetto>"` e poi `docker network rm <nome>`
+4. Opzionale: `docker compose down --remove-orphans --volumes` se necessario
+
+L’obiettivo è liberare gli endpoint che mantengono il bind della porta.
+
 ### Query Performance Issues
 
 **Symptom**: Specific queries are slow (e.g., `/api/locations`)
