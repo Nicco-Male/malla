@@ -318,6 +318,7 @@ def get_packet_type_nodes():
         cursor = None
         try:
             conn = get_db_connection()
+            conn.autocommit = True
             cursor = conn.cursor(cursor_factory=RealDictCursor)
 
             where_conditions = [
@@ -406,6 +407,7 @@ def get_top_channel_utilizers():
         cursor = None
         try:
             conn = get_db_connection()
+            conn.autocommit = True
             cursor = conn.cursor(cursor_factory=RealDictCursor)
 
             where_conditions = ["ph.timestamp >= %s", "ph.from_node_id IS NOT NULL"]
@@ -474,6 +476,7 @@ def get_channel_stats():
         cursor = None
         try:
             conn = get_db_connection()
+            conn.autocommit = True
             cursor = conn.cursor(cursor_factory=RealDictCursor)
 
             where_conditions = ["timestamp >= %s"]
@@ -535,6 +538,7 @@ def get_network_health():
         cursor = None
         try:
             conn = get_db_connection()
+            conn.autocommit = True
             cursor = conn.cursor(cursor_factory=RealDictCursor)
 
             where_conditions = ["timestamp >= %s"]
@@ -620,6 +624,7 @@ def get_node_naming_stats():
         cursor = None
         try:
             conn = get_db_connection()
+            conn.autocommit = True
             cursor = conn.cursor(cursor_factory=RealDictCursor)
 
             # Consider a node "custom named" if it has a non-empty long_name or short_name
@@ -702,6 +707,7 @@ def get_neighbors():
         cursor = None
         try:
             conn = get_db_connection()
+            conn.autocommit = True
             cursor = conn.cursor(cursor_factory=RealDictCursor)
 
             # Fetch communications that imply proximity:
@@ -901,6 +907,7 @@ def get_signal_quality_nodes():
         cursor = None
         try:
             conn = get_db_connection()
+            conn.autocommit = True
             cursor = conn.cursor(cursor_factory=RealDictCursor)
 
             where_conditions = [
@@ -1006,6 +1013,7 @@ def get_hop_distribution():
         cursor = None
         try:
             conn = get_db_connection()
+            conn.autocommit = True
             cursor = conn.cursor(cursor_factory=RealDictCursor)
 
             where_conditions = [
@@ -1083,6 +1091,7 @@ def get_hardware_model_distribution():
         cursor = None
         try:
             conn = get_db_connection()
+            conn.autocommit = True
             cursor = conn.cursor(cursor_factory=RealDictCursor)
 
             where_conditions = [
@@ -1139,6 +1148,7 @@ def get_peak_activity_hours():
         cursor = None
         try:
             conn = get_db_connection()
+            conn.autocommit = True
             cursor = conn.cursor(cursor_factory=RealDictCursor)
 
             where_conditions = ["timestamp >= %s"]
@@ -1334,6 +1344,7 @@ def api_nodes():
         cursor = None
         try:
             conn = get_db_connection()
+            conn.autocommit = True
             cursor = conn.cursor()
             cursor.execute(
                 """
@@ -1403,6 +1414,7 @@ def api_nodes_search():
         cursor = None
         try:
             conn = get_db_connection()
+            conn.autocommit = True
             cursor = conn.cursor()
             cursor.execute(
                 """
@@ -1532,6 +1544,7 @@ def api_gateways_search():
             cursor = None
             try:
                 conn = get_db_connection()
+                conn.autocommit = True
                 cursor = conn.cursor()
 
                 cursor.execute(
@@ -1784,12 +1797,22 @@ def api_stream_packets():
         return _rate_limit_response(retry_after)
 
     if request.args.get("probe") == "1":
+        conn = None
         try:
             conn = get_db_connection()
-            put_db_connection(conn)
+            conn.autocommit = True
+            return ("", 204)
         except DatabaseConnectionError as exc:
             return _database_connection_response(exc)
-        return ("", 204)
+        finally:
+            if conn:
+                try:
+                    put_db_connection(conn)
+                except Exception:
+                    try:
+                        conn.close()
+                    except Exception:
+                        pass
 
     try:
         last_id = request.args.get("last_id", default=0, type=int)
@@ -1806,6 +1829,7 @@ def api_stream_packets():
         cursor = None
         try:
             conn = get_db_connection()
+            conn.autocommit = True
             cursor = conn.cursor()
             cursor.execute("SELECT COALESCE(MAX(id), 0) FROM packet_history")
             row = cursor.fetchone()
@@ -1866,9 +1890,11 @@ def api_stream_packets():
 
         try:
             while True:
+                rows = []
                 try:
                     # Get connection for this poll only, release after query
                     conn = get_db_connection()
+                    conn.autocommit = True
                     cursor = conn.cursor(cursor_factory=RealDictCursor)
                     cursor.execute(
                         """
@@ -1884,10 +1910,6 @@ def api_stream_packets():
                         (last_id,),
                     )
                     rows = cursor.fetchall()
-                    cursor.close()
-                    put_db_connection(conn)
-                    conn = None
-                    cursor = None
                 except DatabaseConnectionError as exc:
                     logger.error(f"Live stream query failed: {exc}")
                     error_payload = {
@@ -1897,11 +1919,10 @@ def api_stream_packets():
                     }
                     error_json = json.dumps(error_payload, default=str)
                     yield f"event: server-error\ndata: {error_json}\n\n"
-                    _cleanup_conn()
                     break
                 except Exception as exc:  # noqa: BLE001
                     logger.error(f"Live stream query failed: {exc}")
-                    rows = []
+                finally:
                     _cleanup_conn()
 
                 if rows:
@@ -1950,6 +1971,7 @@ def api_chat_messages():
         cursor = None
         try:
             conn = get_db_connection()
+            conn.autocommit = True
             cursor = conn.cursor(cursor_factory=RealDictCursor)
 
             where_clause = "WHERE portnum_name = 'TEXT_MESSAGE_APP'"
@@ -2283,43 +2305,46 @@ def api_live_node_stats():
         lookback_hours = request.args.get("hours", 24, type=int)
         lookback_hours = max(1, min(lookback_hours, 168))
 
-        conn = get_db_connection()
-        cursor = conn.cursor(cursor_factory=RealDictCursor)
-        cursor.execute(
-            """
-            SELECT
-                from_node_id AS node_id,
-                MAX(timestamp) AS last_seen,
-                COUNT(*) AS pkt_count,
-                AVG(CAST(rssi AS FLOAT)) AS avg_rssi,
-                AVG(CAST(snr AS FLOAT)) AS avg_snr,
-                AVG(CASE WHEN hop_start IS NOT NULL AND hop_limit IS NOT NULL THEN hop_start - hop_limit END) AS avg_hops,
-                MIN(CASE WHEN hop_start IS NOT NULL AND hop_limit IS NOT NULL THEN hop_start - hop_limit END) AS min_hops,
-                MAX(CASE WHEN hop_start IS NOT NULL AND hop_limit IS NOT NULL THEN hop_start - hop_limit END) AS max_hops
-            FROM packet_history
-            WHERE timestamp >= (EXTRACT(EPOCH FROM NOW()) - (%s * 3600))
-              AND from_node_id IS NOT NULL
-            GROUP BY from_node_id
-            """,
-            (lookback_hours,),
-        )
-        rows = cursor.fetchall() or []
-        cursor.close()
-        put_db_connection(conn)
+        conn = None
+        cursor = None
+        try:
+            conn = get_db_connection()
+            conn.autocommit = True
+            cursor = conn.cursor(cursor_factory=RealDictCursor)
+            cursor.execute(
+                """
+                SELECT
+                    from_node_id AS node_id,
+                    MAX(timestamp) AS last_seen,
+                    COUNT(*) AS pkt_count,
+                    AVG(CAST(rssi AS FLOAT)) AS avg_rssi,
+                    AVG(CAST(snr AS FLOAT)) AS avg_snr,
+                    AVG(CASE WHEN hop_start IS NOT NULL AND hop_limit IS NOT NULL THEN hop_start - hop_limit END) AS avg_hops,
+                    MIN(CASE WHEN hop_start IS NOT NULL AND hop_limit IS NOT NULL THEN hop_start - hop_limit END) AS min_hops,
+                    MAX(CASE WHEN hop_start IS NOT NULL AND hop_limit IS NOT NULL THEN hop_start - hop_limit END) AS max_hops
+                FROM packet_history
+                WHERE timestamp >= (EXTRACT(EPOCH FROM NOW()) - (%s * 3600))
+                  AND from_node_id IS NOT NULL
+                GROUP BY from_node_id
+                """,
+                (lookback_hours,),
+            )
+            rows = cursor.fetchall() or []
+        finally:
+            if cursor:
+                cursor.close()
+            if conn:
+                try:
+                    put_db_connection(conn)
+                except Exception:
+                    try:
+                        conn.close()
+                    except Exception:
+                        pass
 
         return jsonify({"stats": rows, "hours": lookback_hours})
     except Exception as exc:  # noqa: BLE001
         logger.error(f"Error in API live node stats: {exc}")
-        try:
-            if cursor:
-                cursor.close()
-        except Exception:
-            pass
-        try:
-            if conn:
-                put_db_connection(conn)
-        except Exception:
-            pass
         return jsonify({"error": str(exc), "stats": []}), 500
 
 
@@ -2586,38 +2611,45 @@ def api_traceroute_hops_nodes():
     try:
         # Time the database query
         db_start = time.time()
-        conn = get_db_connection()
-        cursor = conn.cursor(cursor_factory=RealDictCursor)
-
-        # Get nodes that have been involved in traceroutes (either as source or destination)
-        query = """
-            SELECT DISTINCT
-                ni.node_id,
-                ni.long_name,
-                ni.short_name,
-                ni.hw_model,
-                ('!' || lpad(to_hex(ni.node_id), 8, '0')) as hex_id
-            FROM node_info ni
-            WHERE ni.node_id IN (
-                SELECT DISTINCT from_node_id FROM packet_history
-                WHERE portnum_name = 'TRACEROUTE_APP' AND from_node_id IS NOT NULL
-                UNION
-                SELECT DISTINCT to_node_id FROM packet_history
-                WHERE portnum_name = 'TRACEROUTE_APP' AND to_node_id IS NOT NULL
-            )
-            ORDER BY ni.long_name, ni.short_name
-        """
-
-        cursor.execute(query)
-        nodes_data = [dict(row) for row in cursor.fetchall()]
-        cursor.close()
+        conn = None
+        cursor = None
         try:
-            put_db_connection(conn)
-        except Exception:
-            try:
-                conn.close()
-            except Exception:
-                pass
+            conn = get_db_connection()
+            conn.autocommit = True
+            cursor = conn.cursor(cursor_factory=RealDictCursor)
+
+            # Get nodes that have been involved in traceroutes (either as source or destination)
+            query = """
+                SELECT DISTINCT
+                    ni.node_id,
+                    ni.long_name,
+                    ni.short_name,
+                    ni.hw_model,
+                    ('!' || lpad(to_hex(ni.node_id), 8, '0')) as hex_id
+                FROM node_info ni
+                WHERE ni.node_id IN (
+                    SELECT DISTINCT from_node_id FROM packet_history
+                    WHERE portnum_name = 'TRACEROUTE_APP' AND from_node_id IS NOT NULL
+                    UNION
+                    SELECT DISTINCT to_node_id FROM packet_history
+                    WHERE portnum_name = 'TRACEROUTE_APP' AND to_node_id IS NOT NULL
+                )
+                ORDER BY ni.long_name, ni.short_name
+            """
+
+            cursor.execute(query)
+            nodes_data = [dict(row) for row in cursor.fetchall()]
+        finally:
+            if cursor:
+                cursor.close()
+            if conn:
+                try:
+                    put_db_connection(conn)
+                except Exception:
+                    try:
+                        conn.close()
+                    except Exception:
+                        pass
         db_time = time.time() - db_start
 
         # Get location data for these nodes only (avoid decoding positions for the whole network)
