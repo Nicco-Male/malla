@@ -22,6 +22,7 @@ from ..database import (
     get_db_connection,
 )
 from ..database.connection import put_db_connection
+from ..exceptions import DatabaseConnectionError
 from ..instrumentation import register_metrics
 from ..models.traceroute import TraceroutePacket
 from ..services.analytics_service import AnalyticsService
@@ -57,6 +58,62 @@ _locations_cache_lock = threading.Lock()
 LOCATION_CACHE_TTL = 30  # seconds
 MAX_NODE_PAGE_SIZE = 10000
 MAX_TRACEROUTE_PAGE_SIZE = 2000
+DB_RETRY_AFTER_SECONDS = 5
+RATE_LIMIT_WINDOW_SECONDS = 60
+RATE_LIMIT_CONFIG = {
+    "stream_packets": {"limit": 12, "window": RATE_LIMIT_WINDOW_SECONDS},
+    "locations": {"limit": 10, "window": RATE_LIMIT_WINDOW_SECONDS},
+}
+_rate_limit_store: dict[str, list[float]] = {}
+_rate_limit_lock = threading.Lock()
+
+
+def _get_client_identifier() -> str:
+    forwarded = request.headers.get("X-Forwarded-For", "")
+    if forwarded:
+        return forwarded.split(",")[0].strip()
+    return request.remote_addr or "unknown"
+
+
+def _check_rate_limit(bucket: str, limit: int, window: int) -> tuple[bool, int]:
+    now = time.time()
+    client_id = _get_client_identifier()
+    key = f"{bucket}:{client_id}"
+    with _rate_limit_lock:
+        timestamps = [ts for ts in _rate_limit_store.get(key, []) if now - ts < window]
+        if len(timestamps) >= limit:
+            retry_after = max(1, int(window - (now - timestamps[0])))
+            _rate_limit_store[key] = timestamps
+            return False, retry_after
+        timestamps.append(now)
+        _rate_limit_store[key] = timestamps
+    return True, 0
+
+
+def _rate_limit_response(retry_after: int) -> Response:
+    payload = {"error": "Rate limit exceeded", "retry_after": retry_after}
+    response = jsonify(payload)
+    response.status_code = 429
+    response.headers["Retry-After"] = str(retry_after)
+    return response
+
+
+def _database_connection_response(error: Exception) -> Response:
+    payload = {
+        "error": "Database connection unavailable",
+        "message": str(error),
+        "retry_after": DB_RETRY_AFTER_SECONDS,
+    }
+    response = jsonify(payload)
+    response.status_code = 503
+    response.headers["Retry-After"] = str(DB_RETRY_AFTER_SECONDS)
+    return response
+
+
+@api_bp.errorhandler(DatabaseConnectionError)
+def handle_database_connection_error(error: DatabaseConnectionError):
+    logger.warning("Database connection error in API routes: %s", error)
+    return _database_connection_response(error)
 
 
 @api_bp.route("/stats")
@@ -1719,6 +1776,21 @@ def api_traceroute_details(packet_id):
 def api_stream_packets():
     """Server-sent events stream for recent packets (lightweight live feed)."""
 
+    rate_config = RATE_LIMIT_CONFIG["stream_packets"]
+    allowed, retry_after = _check_rate_limit(
+        "stream_packets", rate_config["limit"], rate_config["window"]
+    )
+    if not allowed:
+        return _rate_limit_response(retry_after)
+
+    if request.args.get("probe") == "1":
+        try:
+            conn = get_db_connection()
+            put_db_connection(conn)
+        except DatabaseConnectionError as exc:
+            return _database_connection_response(exc)
+        return ("", 204)
+
     try:
         last_id = request.args.get("last_id", default=0, type=int)
     except Exception:
@@ -1738,6 +1810,9 @@ def api_stream_packets():
             cursor.execute("SELECT COALESCE(MAX(id), 0) FROM packet_history")
             row = cursor.fetchone()
             last_id = row[0] if row else 0
+        except DatabaseConnectionError as exc:
+            logger.error(f"Failed to initialize live stream cursor: {exc}")
+            return _database_connection_response(exc)
         except Exception as exc:  # noqa: BLE001
             logger.error(f"Failed to initialize live stream cursor: {exc}")
             last_id = 0
@@ -1813,6 +1888,17 @@ def api_stream_packets():
                     put_db_connection(conn)
                     conn = None
                     cursor = None
+                except DatabaseConnectionError as exc:
+                    logger.error(f"Live stream query failed: {exc}")
+                    error_payload = {
+                        "error": "connection pool exhausted",
+                        "message": str(exc),
+                        "retry_after": DB_RETRY_AFTER_SECONDS,
+                    }
+                    error_json = json.dumps(error_payload, default=str)
+                    yield f"event: server-error\ndata: {error_json}\n\n"
+                    _cleanup_conn()
+                    break
                 except Exception as exc:  # noqa: BLE001
                     logger.error(f"Live stream query failed: {exc}")
                     rows = []
@@ -2048,6 +2134,13 @@ def api_locations():
     start_time_perf = time.time()
     logger.info("API locations endpoint accessed")
 
+    rate_config = RATE_LIMIT_CONFIG["locations"]
+    allowed, retry_after = _check_rate_limit(
+        "locations", rate_config["limit"], rate_config["window"]
+    )
+    if not allowed:
+        return _rate_limit_response(retry_after)
+
     # Create cache key from request parameters
     cache_key_parts = [
         request.args.get("span", ""),
@@ -2162,6 +2255,9 @@ def api_locations():
                 _locations_cache.pop(key, None)
 
         return safe_jsonify(response_data)
+    except DatabaseConnectionError as e:
+        logger.error(f"Database connection error in API locations: {e}")
+        return _database_connection_response(e)
     except Exception as e:
         logger.error(f"Error in API locations: {e}")
         return jsonify({"error": str(e)}), 500
