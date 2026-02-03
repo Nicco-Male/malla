@@ -18,7 +18,9 @@
   let lastId = 0;
   let eventSource = null;
   let retryTimer = null;
-  let retryDelayMs = 1000;
+  const BASE_RETRY_DELAY_MS = 1000;
+  const MAX_RETRY_DELAY_MS = 30000;
+  let retryDelayMs = BASE_RETRY_DELAY_MS;
   let seenIds = new Set();
   let displayWindowMs = 900000; // default 15 minutes
   let arcLifeMs = 120000; // fade packet arcs after ~2 minutes
@@ -928,6 +930,64 @@
     }
   }
 
+  function buildStreamUrl(params = {}) {
+    const url = new URL("/api/stream/packets", window.location.origin);
+    url.searchParams.set("last_id", lastId);
+    Object.entries(params).forEach(([key, value]) => {
+      if (value !== undefined && value !== null) {
+        url.searchParams.set(key, value);
+      }
+    });
+    return `${url.pathname}${url.search}`;
+  }
+
+  function clampRetryDelay(ms) {
+    return Math.min(MAX_RETRY_DELAY_MS, Math.max(BASE_RETRY_DELAY_MS, ms));
+  }
+
+  function resetRetryDelay() {
+    retryDelayMs = BASE_RETRY_DELAY_MS;
+  }
+
+  function applyBackoff(multiplier) {
+    retryDelayMs = clampRetryDelay(Math.ceil(retryDelayMs * multiplier));
+    return retryDelayMs;
+  }
+
+  async function updateRetryDelayForStreamError() {
+    let multiplier = 1.5;
+    let retryAfterMs = 0;
+
+    try {
+      const response = await fetch(buildStreamUrl({ probe: "1" }), { cache: "no-store" });
+      if (response.status >= 500) {
+        multiplier = 2;
+        let payload = null;
+        try {
+          payload = await response.json();
+        } catch (e) {
+          payload = null;
+        }
+        const message = `${payload?.error || ""} ${payload?.message || ""}`.toLowerCase();
+        if (message.includes("connection pool exhausted")) {
+          multiplier = 2;
+        }
+        const retryAfterHeader = response.headers.get("Retry-After");
+        const retryAfterSeconds = parseInt(retryAfterHeader || payload?.retry_after, 10);
+        if (!Number.isNaN(retryAfterSeconds)) {
+          retryAfterMs = retryAfterSeconds * 1000;
+        }
+      }
+    } catch (e) {
+      // Leave default multiplier for network/probe failures.
+    }
+
+    const nextDelay = applyBackoff(multiplier);
+    if (retryAfterMs > nextDelay) {
+      retryDelayMs = clampRetryDelay(retryAfterMs);
+    }
+  }
+
   function stopStream() {
     if (eventSource) {
       eventSource.close();
@@ -946,11 +1006,11 @@
   function scheduleReconnect() {
     if (paused) return;
     if (retryTimer) return;
+    const delayMs = retryDelayMs;
     retryTimer = setTimeout(() => {
       retryTimer = null;
       startStream();
-      retryDelayMs = Math.min(15000, Math.max(1000, retryDelayMs * 1.5));
-    }, retryDelayMs);
+    }, delayMs);
   }
 
   let lastPacketTime = Date.now();
@@ -959,14 +1019,13 @@
 
   function startStream() {
     stopStream();
-    retryDelayMs = 1000;
     lastPacketTime = Date.now();
     if (liveStatus) {
       liveStatus.classList.remove("bg-danger", "paused");
       liveStatus.classList.add("bg-success", "pulse");
       liveStatus.textContent = "Live";
     }
-    eventSource = new EventSource(`/api/stream/packets?last_id=${lastId}`);
+    eventSource = new EventSource(buildStreamUrl());
 
     // Heartbeat timeout detection
     function checkHeartbeat() {
@@ -979,6 +1038,7 @@
           liveReconnectHint.textContent = "Connection stalled - reconnecting…";
           liveReconnectHint.classList.remove("d-none");
         }
+        applyBackoff(1.5);
         scheduleReconnect();
       } else if (!paused) {
         heartbeatTimer = setTimeout(checkHeartbeat, 5000); // Check every 5 seconds
@@ -993,7 +1053,7 @@
       liveStatus.classList.remove("paused");
       liveReconnectHint?.classList.add("d-none");
       liveReconnectHint?.classList.remove("text-warning");
-      retryDelayMs = 1000; // reset backoff after a good message
+      resetRetryDelay(); // reset backoff after a good message
       try {
         const packet = JSON.parse(evt.data);
 
@@ -1018,6 +1078,42 @@
         console.error("Bad packet event", e);
       }
     };
+    eventSource.addEventListener("server-error", (evt) => {
+      if (heartbeatTimer) {
+        clearTimeout(heartbeatTimer);
+        heartbeatTimer = null;
+      }
+      liveStatus.classList.remove("bg-success", "pulse");
+      liveStatus.classList.add("bg-danger");
+      if (liveReconnectHint) {
+        liveReconnectHint.textContent = "Server overloaded - reconnecting…";
+        liveReconnectHint.classList.remove("d-none");
+      }
+      try {
+        const payload = JSON.parse(evt.data);
+        const message = `${payload?.error || ""} ${payload?.message || ""}`.toLowerCase();
+        if (message.includes("connection pool exhausted")) {
+          applyBackoff(2);
+        } else {
+          applyBackoff(1.5);
+        }
+        if (payload?.retry_after) {
+          retryDelayMs = clampRetryDelay(payload.retry_after * 1000);
+        }
+      } catch (e) {
+        applyBackoff(1.5);
+      }
+      if (eventSource) {
+        try {
+          eventSource.close();
+        } catch (e) {
+          // Ignore errors when closing
+        }
+        eventSource = null;
+      }
+      scheduleReconnect();
+    });
+
     eventSource.onerror = (error) => {
       if (heartbeatTimer) {
         clearTimeout(heartbeatTimer);
@@ -1039,7 +1135,9 @@
         }
         eventSource = null;
       }
-      scheduleReconnect();
+      updateRetryDelayForStreamError().finally(() => {
+        scheduleReconnect();
+      });
     };
   }
 
