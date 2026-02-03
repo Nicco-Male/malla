@@ -213,6 +213,30 @@ body {
   color: var(--bs-secondary);
 }
 
+/* Payload/JSON blocks */
+.payload-hex,
+.yaml-content {
+  font-family: 'Courier New', monospace;
+  background-color: var(--surface-2);
+  color: var(--bs-body-color);
+  border: 1px solid var(--bs-border-color);
+  border-radius: 0.5rem;
+}
+
+.payload-hex {
+  padding: 10px;
+  word-break: break-all;
+  font-size: 0.8rem;
+}
+
+.yaml-content {
+  padding: 15px;
+  font-size: 0.85rem;
+  white-space: pre-wrap;
+  max-height: 400px;
+  overflow-y: auto;
+}
+
 /* Progress Bars */
 .progress {
   background-color: var(--surface-3);
