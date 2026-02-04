@@ -114,7 +114,8 @@ class AppConfig:
         """Parse and return set of ignored node IDs from the configuration.
 
         Supports comma-separated list of node IDs in decimal or hex format.
-        Hex IDs can be prefixed with '!' or not (e.g., "!433b3dec" or "433b3dec").
+        Hex IDs can be prefixed with '!' or '0x' (e.g., "!433b3dec", "0x1a2b")
+        or provided without a prefix when they contain hex letters (e.g., "433b3dec").
         Decimal IDs are also supported (e.g., "1127955948").
         Empty values are filtered out.
 
@@ -132,21 +133,29 @@ class AppConfig:
             if not node_id_str:
                 continue
 
+            original_value = node_id_str
             try:
-                # Try parsing as hex first (with or without ! prefix)
+                # Treat values with "!" or "0x" prefixes as hex. Otherwise, only
+                # parse as hex when letters are present to avoid interpreting
+                # decimal-only IDs as hex.
+                is_hex = False
                 if node_id_str.startswith("!"):
                     node_id_str = node_id_str[1:]
-                # Try hex
-                if all(c in "0123456789abcdefABCDEF" for c in node_id_str):
+                    is_hex = True
+                if node_id_str.lower().startswith("0x"):
+                    node_id_str = node_id_str[2:]
+                    is_hex = True
+                if any(c in "abcdefABCDEF" for c in node_id_str):
+                    is_hex = True
+
+                if is_hex:
                     node_id = int(node_id_str, 16)
-                    ignored_ids.add(node_id)
                 else:
-                    # Try decimal
-                    node_id = int(node_id_str)
-                    ignored_ids.add(node_id)
+                    node_id = int(node_id_str, 10)
+                ignored_ids.add(node_id)
             except ValueError:
                 logger.warning(
-                    f"Invalid node ID format in ignored_node_ids: {node_id_str}. Skipping."
+                    f"Invalid node ID format in ignored_node_ids: {original_value}. Skipping."
                 )
 
         return ignored_ids
