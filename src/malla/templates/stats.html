@@ -428,7 +428,7 @@
 </div>
 
 <!-- Unique Statistics Section - Not on Dashboard -->
-<div class="row mb-4">
+<div class="row mb-4" id="advancedNetworkAnalytics">
     <div class="col-12">
         <h4 class="mb-3"><i class="bi bi-graph-up me-2"></i>Advanced Network Analytics</h4>
     </div>
@@ -749,6 +749,30 @@
                     'hardwareModelsChart',
                     'peakHoursChart'
                 ].forEach(id => showError(id, 'Failed to load data. Please refresh the page.'));
+            }
+        }
+
+        function insertChartLoadAlert() {
+            if (document.getElementById('chartLoadAlert')) {
+                return;
+            }
+
+            const alert = document.createElement('div');
+            alert.id = 'chartLoadAlert';
+            alert.className = 'alert alert-danger shadow-sm';
+            alert.setAttribute('role', 'alert');
+            alert.textContent = 'Chart.js non caricato: verifica CDN/SRI o CSP';
+
+            const anchor = document.getElementById('advancedNetworkAnalytics');
+            if (anchor && anchor.parentNode) {
+                anchor.parentNode.insertBefore(alert, anchor);
+            } else {
+                const contentRoot = document.querySelector('.row');
+                if (contentRoot && contentRoot.parentNode) {
+                    contentRoot.parentNode.insertBefore(alert, contentRoot);
+                } else {
+                    document.body.insertBefore(alert, document.body.firstChild);
+                }
             }
         }
 
