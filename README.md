@@ -11,7 +11,7 @@ Original Map:
 
 My Map:
 - worldmap.niccomale.it (Wold): https://worldmap.niccomale.it
-- europemap.niccomale.it (Europe): https://europe.niccomale.it
+- europemap.niccomale.it (Europe): https://europemap.niccomale.it
 - itamap.niccomale.it (Italy): https://itamap.niccomale.it/
 - tuscanymap.niccomale.it (Tuscany IT): https://tuscanymap.niccomale.it/
 - campania.niccomale.it (Campania IT): https://campania.niccomale.it/
