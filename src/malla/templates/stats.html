@@ -514,7 +514,9 @@
             // Check if Chart.js is available
             if (typeof Chart === 'undefined') {
                 console.error('Chart.js is not loaded. Please check that Chart.js is included in base.html');
-                showError('networkOverview', 'Chart.js library is not loaded. Please refresh the page.');
+                const message = 'Chart.js library is not loaded. Please refresh the page.';
+                showChartContainersError(message);
+                showError('networkOverview', message);
                 return;
             }
 
@@ -1269,6 +1271,27 @@
             }
 
             element.innerHTML = `<div class="text-warning"><i class="bi bi-exclamation-triangle me-1"></i>${message}</div>`;
+        }
+
+        function showChartContainersError(message) {
+            const containers = document.querySelectorAll('.chart-container');
+            if (!containers.length) return;
+
+            containers.forEach(container => {
+                const canvas = container.querySelector('canvas');
+                if (canvas) {
+                    replaceChartWithMessage(canvas, message);
+                    return;
+                }
+
+                let alert = container.querySelector('.chart-alert');
+                if (!alert) {
+                    alert = document.createElement('div');
+                    alert.className = 'alert alert-warning m-0 chart-alert';
+                    container.appendChild(alert);
+                }
+                alert.innerHTML = `<i class="bi bi-exclamation-triangle me-2"></i>${message}`;
+            });
         }
 
         function replaceChartWithMessage(canvas, message) {
