@@ -7,6 +7,11 @@ Malla (Spanish for "mesh") captures Meshtastic MQTT traffic into **PostgreSQL** 
 ## Running Instances
 - meshtastic.es (Spain): https://malla.meshtastic.es
 - malla.ctmesh.org (Connecticut): https://malla.ctmesh.org
+- worldmap.niccomale.it (Wold): https://worldmap.niccomale.it
+- europe.niccomale.it (Europe): https://europe.niccomale.it
+- itamap.niccomale.it (Italy): https://itamap.niccomale.it/
+- tuscanymap.niccomale.it (Tuscany IT): https://tuscanymap.niccomale.it/
+- campania.niccomale.it (Campania IT): https://campania.niccomale.it/
 
 ## Components
 - `malla-capture`: subscribes to your Meshtastic MQTT broker, optionally decrypts secondary channels, and writes packets/node info into PostgreSQL with schema migrations and background data cleanup.
