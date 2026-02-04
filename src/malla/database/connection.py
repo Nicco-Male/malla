@@ -8,6 +8,7 @@ import logging
 import os
 import threading
 import time
+from contextlib import contextmanager
 from typing import Any
 
 from psycopg2 import OperationalError, pool
@@ -145,6 +146,23 @@ def put_db_connection(conn: Any) -> None:
             try:
                 if hasattr(conn, "close"):
                     conn.close()
+            except Exception:
+                pass
+
+
+@contextmanager
+def db_connection(*, autocommit: bool = False) -> Any:
+    """Context manager that returns a pooled DB connection and ensures cleanup."""
+    conn = get_db_connection()
+    conn.autocommit = autocommit
+    try:
+        yield conn
+    finally:
+        try:
+            put_db_connection(conn)
+        except Exception:
+            try:
+                conn.close()
             except Exception:
                 pass
 

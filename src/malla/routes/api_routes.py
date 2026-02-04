@@ -21,7 +21,7 @@ from ..database import (
     TracerouteRepository,
     get_db_connection,
 )
-from ..database.connection import put_db_connection
+from ..database.connection import db_connection, put_db_connection
 from ..exceptions import DatabaseConnectionError
 from ..instrumentation import register_metrics
 from ..models.traceroute import TraceroutePacket
@@ -1797,22 +1797,11 @@ def api_stream_packets():
         return _rate_limit_response(retry_after)
 
     if request.args.get("probe") == "1":
-        conn = None
         try:
-            conn = get_db_connection()
-            conn.autocommit = True
-            return ("", 204)
+            with db_connection(autocommit=True):
+                return ("", 204)
         except DatabaseConnectionError as exc:
             return _database_connection_response(exc)
-        finally:
-            if conn:
-                try:
-                    put_db_connection(conn)
-                except Exception:
-                    try:
-                        conn.close()
-                    except Exception:
-                        pass
 
     try:
         last_id = request.args.get("last_id", default=0, type=int)
@@ -1825,32 +1814,21 @@ def api_stream_packets():
     # If no last_id was provided, start from the most recent packet so we only
     # stream new data after the page is opened/refreshed.
     if last_id <= 0:
-        conn = None
-        cursor = None
         try:
-            conn = get_db_connection()
-            conn.autocommit = True
-            cursor = conn.cursor()
-            cursor.execute("SELECT COALESCE(MAX(id), 0) FROM packet_history")
-            row = cursor.fetchone()
-            last_id = row[0] if row else 0
+            with db_connection(autocommit=True) as conn:
+                cursor = conn.cursor()
+                try:
+                    cursor.execute("SELECT COALESCE(MAX(id), 0) FROM packet_history")
+                    row = cursor.fetchone()
+                    last_id = row[0] if row else 0
+                finally:
+                    cursor.close()
         except DatabaseConnectionError as exc:
             logger.error(f"Failed to initialize live stream cursor: {exc}")
             return _database_connection_response(exc)
         except Exception as exc:  # noqa: BLE001
             logger.error(f"Failed to initialize live stream cursor: {exc}")
             last_id = 0
-        finally:
-            if cursor:
-                cursor.close()
-            if conn:
-                try:
-                    put_db_connection(conn)
-                except Exception:
-                    try:
-                        conn.close()
-                    except Exception:
-                        pass
 
     def _row_to_payload(row: Any) -> dict[str, Any]:
         payload: dict[str, Any] = dict(row)
@@ -1867,49 +1845,31 @@ def api_stream_packets():
     @stream_with_context
     def event_stream():
         nonlocal last_id
-        conn = None
-        cursor = None
-
-        def _cleanup_conn() -> None:
-            nonlocal conn, cursor
-            if cursor:
-                try:
-                    cursor.close()
-                except Exception:
-                    pass
-            if conn:
-                try:
-                    put_db_connection(conn)
-                except Exception:
-                    try:
-                        conn.close()
-                    except Exception:
-                        pass
-            conn = None
-            cursor = None
 
         try:
             while True:
                 rows = []
                 try:
                     # Get connection for this poll only, release after query
-                    conn = get_db_connection()
-                    conn.autocommit = True
-                    cursor = conn.cursor(cursor_factory=RealDictCursor)
-                    cursor.execute(
-                        """
-                        SELECT
-                            id, timestamp, from_node_id, to_node_id, gateway_id,
-                            channel_id, portnum_name, rssi, snr, hop_limit, hop_start,
-                            mesh_packet_id, raw_payload
-                        FROM packet_history
-                        WHERE id > %s
-                        ORDER BY id ASC
-                        LIMIT 200
-                        """,
-                        (last_id,),
-                    )
-                    rows = cursor.fetchall()
+                    with db_connection(autocommit=True) as conn:
+                        cursor = conn.cursor(cursor_factory=RealDictCursor)
+                        try:
+                            cursor.execute(
+                                """
+                                SELECT
+                                    id, timestamp, from_node_id, to_node_id, gateway_id,
+                                    channel_id, portnum_name, rssi, snr, hop_limit, hop_start,
+                                    mesh_packet_id, raw_payload
+                                FROM packet_history
+                                WHERE id > %s
+                                ORDER BY id ASC
+                                LIMIT 200
+                                """,
+                                (last_id,),
+                            )
+                            rows = cursor.fetchall()
+                        finally:
+                            cursor.close()
                 except DatabaseConnectionError as exc:
                     logger.error(f"Live stream query failed: {exc}")
                     error_payload = {
@@ -1922,8 +1882,6 @@ def api_stream_packets():
                     break
                 except Exception as exc:  # noqa: BLE001
                     logger.error(f"Live stream query failed: {exc}")
-                finally:
-                    _cleanup_conn()
 
                 if rows:
                     for row in rows:
@@ -1947,8 +1905,6 @@ def api_stream_packets():
                     yield ": keep-alive\n\n"
 
                 time.sleep(poll_interval)
-        finally:
-            _cleanup_conn()
 
     headers = {
         "Content-Type": "text/event-stream",
