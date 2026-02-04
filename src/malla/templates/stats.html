@@ -1971,7 +1971,7 @@
                             backgroundColor: `${palette.info}cc`,
                             borderColor: palette.info,
                             borderWidth: 1.5,
-                            yAxisID: 'y'
+                            xAxisID: 'x'
                         },
                         {
                             label: 'Packets',
@@ -1979,7 +1979,7 @@
                             backgroundColor: `${palette.warning}cc`,
                             borderColor: palette.warning,
                             borderWidth: 1.5,
-                            yAxisID: 'y1'
+                            xAxisID: 'x1'
                         }
                     ]
                 },
@@ -1987,15 +1987,27 @@
                     indexAxis: 'y',
                     responsive: true,
                     maintainAspectRatio: false,
+                    layout: {
+                        padding: {
+                            left: 36,
+                            right: 16
+                        }
+                    },
                     plugins: { legend: { position: 'top' } },
                     scales: {
                         y: {
+                            ticks: {
+                                autoSkip: false,
+                                padding: 8
+                            }
+                        },
+                        x: {
                             beginAtZero: true,
                             title: { display: true, text: 'Nodes' }
                         },
-                        y1: {
+                        x1: {
                             beginAtZero: true,
-                            position: 'right',
+                            position: 'top',
                             grid: { drawOnChartArea: false },
                             title: { display: true, text: 'Packets' }
                         }
