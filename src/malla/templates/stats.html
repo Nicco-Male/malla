@@ -1634,9 +1634,10 @@
             gateways.forEach(gw => {
                 const tr = document.createElement('tr');
                 const gatewayId = gw.gateway_id || gw.id || 'Unknown';
-                const display = gatewayId;
+                const gatewayName = gw.gateway_name;
                 const lastSeenStr = gw.last_seen_str || 'Unknown';
                 const online = !!gw.online;
+                const sourcesCount = gw.unique_sources || 0;
 
                 const badgeClass = online ? 'bg-success' : 'bg-secondary';
                 const badgeText = online ? 'Online' : 'Offline';
@@ -1645,7 +1646,10 @@
                 <td>
                     <div class="d-flex align-items-center">
                         <span class="badge bg-dark me-2">${gatewayId}</span>
-                        <span class="small text-muted">${gw.unique_sources || 0} sources</span>
+                        <div>
+                            ${gatewayName ? `<div class="fw-semibold">${gatewayName}</div>` : ''}
+                            <div class="small text-muted">${sourcesCount} sources</div>
+                        </div>
                     </div>
                 </td>
                 <td class="text-center">
