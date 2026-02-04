@@ -27,7 +27,7 @@ services:
     command: ${MALLA_WEB_COMMAND:-/app/.venv/bin/malla-web}
 
     ports:
-      - "${MALLA_WEB_PORT:-5023}:5008"
+      - "${MALLA_WEB_PORT:-5008}:5008"
     environment:
       - MALLA_SERVICE_TYPE=web
       - MALLA_HOST=0.0.0.0
@@ -39,7 +39,7 @@ services:
       - MALLA_DATABASE_PASSWORD=${POSTGRES_PASSWORD:-MALLA_SUPER_PASSWORD_64_CHARS_MINIMO}
       - MALLA_DB_POOL_MAX=200
       - MALLA_NAME=${MALLA_NAME:-Malla}
-      - MALLA_SECRET_KEY=${MALLA_SECRET_KEY:-7c4973ea8c3035aef0f7eea56717f5af2838531445ba3f65f6f102db47d77fdf}
+      - MALLA_SECRET_KEY=${MALLA_SECRET_KEY:-MALLA_SUPER_PASSWORD_64_CHARS_MINIMO}
       - MALLA_DEBUG=${MALLA_DEBUG:-false}
     volumes:
       - malla_data:/app/data
