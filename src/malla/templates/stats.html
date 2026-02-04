@@ -686,6 +686,24 @@
                     renderGatewayStatusTable('gatewayStatusTable', gatewayStatusData || {});
                 }
 
+                if (hopDistributionData && hopDistributionData.error) {
+                    showError('hopDistributionChart', hopDistributionData.error);
+                } else {
+                    renderHopDistributionChart(hopDistributionData || {});
+                }
+
+                if (hardwareModelsData && hardwareModelsData.error) {
+                    showError('hardwareModelsChart', hardwareModelsData.error);
+                } else {
+                    renderHardwareModelsChart(hardwareModelsData || []);
+                }
+
+                if (peakHoursData && peakHoursData.error) {
+                    showError('peakHoursChart', peakHoursData.error);
+                } else {
+                    renderPeakHoursChart(peakHoursData || {});
+                }
+
                 // Handle telemetry data (arrays, not objects)
                 if (Array.isArray(batteryData)) {
                     renderTelemetryChart('batteryChart', batteryData, 'Battery Level', '%', '#28a745');
@@ -726,7 +744,10 @@
                     'humidityChart',
                     'voltageChart',
                     'topChannelUtilizersTable',
-                    'gatewayStatusTable'
+                    'gatewayStatusTable',
+                    'hopDistributionChart',
+                    'hardwareModelsChart',
+                    'peakHoursChart'
                 ].forEach(id => showError(id, 'Failed to load data. Please refresh the page.'));
             }
         }
