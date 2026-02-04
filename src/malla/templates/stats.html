@@ -556,13 +556,6 @@
                 ]);
 
                 const names = ['hottest', 'coldest', 'utilization', 'packet types', 'channels', 'network health', 'node naming', 'highlighted nodes', 'gateways', 'signal quality', 'signal quality nodes', 'delivery', 'battery', 'humidity', 'voltage', 'top channel utilizers', 'gateway status', 'hop distribution', 'hardware models', 'peak hours'];
-                responses.forEach((res, idx) => {
-                    if (!res.ok) {
-                        console.error(`Failed to load ${names[idx]}: ${res.status} ${res.statusText}`);
-                        throw new Error(`Failed to load ${names[idx]}: ${res.status} ${res.statusText}`);
-                    }
-                });
-
                 const [
                     hottestData,
                     coldestData,
@@ -584,7 +577,12 @@
                     hopDistributionData,
                     hardwareModelsData,
                     peakHoursData
-                ] = await Promise.all(responses.map(async (r) => {
+                ] = await Promise.all(responses.map(async (r, idx) => {
+                    if (!r.ok) {
+                        const message = `HTTP ${r.status} ${r.statusText}`;
+                        console.error(`Failed to load ${names[idx]}: ${message}`);
+                        return { error: message };
+                    }
                     try {
                         return await r.json();
                     } catch (e) {
@@ -686,6 +684,24 @@
                     renderGatewayStatusTable('gatewayStatusTable', gatewayStatusData || {});
                 }
 
+                if (hopDistributionData && hopDistributionData.error) {
+                    showError('hopDistributionChart', hopDistributionData.error);
+                } else {
+                    renderHopDistributionChart(hopDistributionData || {});
+                }
+
+                if (hardwareModelsData && hardwareModelsData.error) {
+                    showError('hardwareModelsChart', hardwareModelsData.error);
+                } else {
+                    renderHardwareModelsChart(hardwareModelsData || []);
+                }
+
+                if (peakHoursData && peakHoursData.error) {
+                    showError('peakHoursChart', peakHoursData.error);
+                } else {
+                    renderPeakHoursChart(peakHoursData || {});
+                }
+
                 // Handle telemetry data (arrays, not objects)
                 if (Array.isArray(batteryData)) {
                     renderTelemetryChart('batteryChart', batteryData, 'Battery Level', '%', '#28a745');
@@ -726,7 +742,10 @@
                     'humidityChart',
                     'voltageChart',
                     'topChannelUtilizersTable',
-                    'gatewayStatusTable'
+                    'gatewayStatusTable',
+                    'hopDistributionChart',
+                    'hardwareModelsChart',
+                    'peakHoursChart'
                 ].forEach(id => showError(id, 'Failed to load data. Please refresh the page.'));
             }
         }
@@ -1785,17 +1804,25 @@
                 chartInstances.hopDistributionChart.destroy();
             }
 
-            const distribution = (data && data.distribution) || [];
-            const summary = (data && data.summary) || {};
+            const distribution = Array.isArray(data?.distribution) ? data.distribution : [];
+            const summary = data && typeof data.summary === 'object' ? data.summary : {};
 
-            if (!distribution.length) {
+            const normalized = distribution
+                .map((d) => ({
+                    hop_count: Number(d.hop_count),
+                    packet_count: Number(d.packet_count),
+                    unique_nodes: Number(d.unique_nodes)
+                }))
+                .filter((d) => Number.isFinite(d.hop_count));
+
+            if (!normalized.length) {
                 replaceChartWithMessage(canvas, 'No routing data available');
                 return;
             }
 
-            const labels = distribution.map(d => `${d.hop_count || 0} hop${d.hop_count !== 1 ? 's' : ''}`);
-            const packetCounts = distribution.map(d => d.packet_count || 0);
-            const nodeCounts = distribution.map(d => d.unique_nodes || 0);
+            const labels = normalized.map(d => `${d.hop_count} hop${d.hop_count !== 1 ? 's' : ''}`);
+            const packetCounts = normalized.map(d => (Number.isFinite(d.packet_count) ? d.packet_count : 0));
+            const nodeCounts = normalized.map(d => (Number.isFinite(d.unique_nodes) ? d.unique_nodes : 0));
 
             const ctx = canvas.getContext('2d');
             chartInstances.hopDistributionChart = new Chart(ctx, {
@@ -1829,8 +1856,11 @@
                         tooltip: {
                             callbacks: {
                                 footer: (items) => {
-                                    if (summary.avg_hops !== undefined) {
-                                        return `Avg: ${summary.avg_hops.toFixed(1)} hops | Direct: ${summary.direct_packets || 0} | Routed: ${summary.routed_packets || 0}`;
+                                    const avgHops = Number(summary.avg_hops);
+                                    if (Number.isFinite(avgHops)) {
+                                        const directPackets = Number(summary.direct_packets) || 0;
+                                        const routedPackets = Number(summary.routed_packets) || 0;
+                                        return `Avg: ${avgHops.toFixed(1)} hops | Direct: ${directPackets} | Routed: ${routedPackets}`;
                                     }
                                     return '';
                                 }
@@ -1871,15 +1901,16 @@
                 chartInstances.hardwareModelsChart.destroy();
             }
 
-            if (!data || !data.length) {
+            const models = Array.isArray(data) ? data : [];
+            if (!models.length) {
                 replaceChartWithMessage(canvas, 'No hardware model data available');
                 return;
             }
 
-            const topModels = data.slice(0, 10);
+            const topModels = models.slice(0, 10);
             const labels = topModels.map(m => m.hw_model || 'Unknown');
-            const nodeCounts = topModels.map(m => m.unique_nodes || 0);
-            const packetCounts = topModels.map(m => m.packet_count || 0);
+            const nodeCounts = topModels.map(m => Number(m.unique_nodes) || 0);
+            const packetCounts = topModels.map(m => Number(m.packet_count) || 0);
 
             const ctx = canvas.getContext('2d');
             chartInstances.hardwareModelsChart = new Chart(ctx, {
@@ -1944,7 +1975,7 @@
                 chartInstances.peakHoursChart.destroy();
             }
 
-            const hourlyData = (data && data.hourly_data) || [];
+            const hourlyData = Array.isArray(data?.hourly_data) ? data.hourly_data : [];
             if (!hourlyData.length) {
                 replaceChartWithMessage(canvas, 'No hourly activity data available');
                 return;
@@ -1953,7 +1984,10 @@
             // Fill in missing hours with 0
             const hourMap = new Map();
             hourlyData.forEach(h => {
-                hourMap.set(parseInt(h.hour), h);
+                const hour = Number.parseInt(h.hour, 10);
+                if (Number.isFinite(hour)) {
+                    hourMap.set(hour, h);
+                }
             });
 
             const labels = [];
