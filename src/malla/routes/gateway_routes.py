@@ -11,7 +11,7 @@ from flask import Blueprint, jsonify, render_template, request
 from ..database.repositories import NodeRepository
 from ..instrumentation import register_metrics
 from ..services.gateway_service import GatewayService
-from ..utils.node_utils import transform_nodes_for_template
+from ..utils.node_utils import get_bulk_node_names, transform_nodes_for_template
 
 logger = logging.getLogger(__name__)
 
@@ -211,6 +211,37 @@ def api_gateway_status():
         distribution = stats.get("gateway_distribution", []) or []
         now_ts = time.time()
 
+        gateway_ids = []
+        gateway_id_map = {}
+
+        for gw in distribution:
+            gateway_id = gw.get("gateway_id")
+            if gateway_id is None:
+                continue
+            if gateway_id in gateway_id_map:
+                continue
+
+            parsed_id = None
+            if isinstance(gateway_id, int):
+                parsed_id = gateway_id
+            elif isinstance(gateway_id, str):
+                cleaned = gateway_id.strip()
+                if cleaned.startswith("!"):
+                    cleaned = cleaned[1:]
+                try:
+                    parsed_id = int(cleaned, 16)
+                except ValueError:
+                    try:
+                        parsed_id = int(cleaned)
+                    except ValueError:
+                        parsed_id = None
+
+            gateway_id_map[gateway_id] = parsed_id
+            if parsed_id is not None:
+                gateway_ids.append(parsed_id)
+
+        gateway_names = get_bulk_node_names(gateway_ids)
+
         status_list = []
         for gw in distribution:
             gateway_id = gw.get("gateway_id")
@@ -221,10 +252,15 @@ def api_gateway_status():
             age_hours = max(0.0, (now_ts - float(last_seen)) / 3600.0)
             # Consider gateway online if we've seen traffic within the selected window
             is_online = age_hours <= hours
+            gateway_name = None
+            parsed_id = gateway_id_map.get(gateway_id)
+            if parsed_id is not None:
+                gateway_name = gateway_names.get(parsed_id)
 
             status_list.append(
                 {
                     "gateway_id": gateway_id,
+                    "gateway_name": gateway_name,
                     "packet_count": gw.get("packet_count", 0),
                     "unique_sources": gw.get("unique_sources", 0),
                     "last_seen": last_seen,
