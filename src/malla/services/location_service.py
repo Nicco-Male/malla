@@ -510,38 +510,35 @@ class LocationService:
             from ..database.connection import get_db_connection, put_db_connection
 
             conn = get_db_connection()
-            cursor = conn.cursor(cursor_factory=RealDictCursor)
-
-            # Total position packets
-            cursor.execute("""
-                SELECT COUNT(*) as total_count
-                FROM packet_history
-                WHERE portnum IN (3, 73)  -- POSITION_APP and MAP_REPORT_APP
-                AND raw_payload IS NOT NULL
-            """)
-            total_position_packets = cursor.fetchone()["total_count"]
-
-            # Recent position packets (last 24 hours)
-            cursor.execute(
-                """
-                SELECT COUNT(*) as recent_count
-                FROM packet_history
-                WHERE portnum IN (3, 73)  -- POSITION_APP and MAP_REPORT_APP
-                AND raw_payload IS NOT NULL
-                AND timestamp > %s
-            """,
-                (twenty_four_hours_ago,),
-            )
-            recent_position_packets = cursor.fetchone()["recent_count"]
-
-            cursor.close()
+            cursor = None
             try:
+                cursor = conn.cursor(cursor_factory=RealDictCursor)
+
+                # Total position packets
+                cursor.execute("""
+                    SELECT COUNT(*) as total_count
+                    FROM packet_history
+                    WHERE portnum IN (3, 73)  -- POSITION_APP and MAP_REPORT_APP
+                    AND raw_payload IS NOT NULL
+                """)
+                total_position_packets = cursor.fetchone()["total_count"]
+
+                # Recent position packets (last 24 hours)
+                cursor.execute(
+                    """
+                    SELECT COUNT(*) as recent_count
+                    FROM packet_history
+                    WHERE portnum IN (3, 73)  -- POSITION_APP and MAP_REPORT_APP
+                    AND raw_payload IS NOT NULL
+                    AND timestamp > %s
+                """,
+                    (twenty_four_hours_ago,),
+                )
+                recent_position_packets = cursor.fetchone()["recent_count"]
+            finally:
+                if cursor:
+                    cursor.close()
                 put_db_connection(conn)
-            except Exception:
-                try:
-                    conn.close()
-                except Exception:
-                    pass
 
             # Calculate geographic boundaries and center
             lats = [loc["latitude"] for loc in locations]
@@ -992,65 +989,63 @@ class LocationService:
             from ..database.connection import get_db_connection, put_db_connection
 
             conn = get_db_connection()
-            cursor = conn.cursor(cursor_factory=RealDictCursor)
-
-            # ------------------------------------------------------------------
-            # Build WHERE clause based on provided filters.
-            # ------------------------------------------------------------------
-            where_clauses: list[str] = [
-                "from_node_id IS NOT NULL",
-                "gateway_id IS NOT NULL",
-                "hop_start IS NOT NULL",
-                "hop_limit IS NOT NULL",
-                "hop_start = hop_limit",  # 0-hop packets only (index-friendly)
-            ]
-            params: list[Any] = []
-
-            # Time range - same handling as get_node_locations / get_traceroute_links
-            if filters.get("start_time") is not None:
-                where_clauses.append("timestamp >= %s")
-                params.append(filters["start_time"])
-            if filters.get("end_time") is not None:
-                where_clauses.append("timestamp <= %s")
-                params.append(filters["end_time"])
-
-            # Optional server-side gateway filter.  ``gateway_id`` is stored as the
-            # hex node id prefixed with '!'.  Convert here if filter is int.
-            if filters.get("gateway_id") is not None:
-                gw_val = filters["gateway_id"]
-                try:
-                    gw_int = int(gw_val)
-                    gw_hex = f"!{gw_int:08x}"
-                except Exception:
-                    # Assume caller already supplied the string format
-                    gw_hex = str(gw_val)
-                where_clauses.append("gateway_id = %s")
-                params.append(gw_hex)
-
-            where_sql = "WHERE " + " AND ".join(where_clauses)
-
-            query = f"""
-                SELECT
-                    from_node_id,
-                    gateway_id,
-                    COUNT(*)               AS packet_count,
-                    AVG(CAST(rssi AS FLOAT)) AS avg_rssi,
-                    AVG(CAST(snr  AS FLOAT)) AS avg_snr,
-                    MAX(timestamp)         AS last_seen
-                FROM packet_history
-                {where_sql}
-                GROUP BY from_node_id, gateway_id
-            """
-            cursor.execute(query, params)
-            rows = [dict(r) for r in cursor.fetchall()]
-            cursor.close()
+            cursor = None
             try:
+                cursor = conn.cursor(cursor_factory=RealDictCursor)
+
+                # ------------------------------------------------------------------
+                # Build WHERE clause based on provided filters.
+                # ------------------------------------------------------------------
+                where_clauses: list[str] = [
+                    "from_node_id IS NOT NULL",
+                    "gateway_id IS NOT NULL",
+                    "hop_start IS NOT NULL",
+                    "hop_limit IS NOT NULL",
+                    "hop_start = hop_limit",  # 0-hop packets only (index-friendly)
+                ]
+                params: list[Any] = []
+
+                # Time range - same handling as get_node_locations / get_traceroute_links
+                if filters.get("start_time") is not None:
+                    where_clauses.append("timestamp >= %s")
+                    params.append(filters["start_time"])
+                if filters.get("end_time") is not None:
+                    where_clauses.append("timestamp <= %s")
+                    params.append(filters["end_time"])
+
+                # Optional server-side gateway filter.  ``gateway_id`` is stored as the
+                # hex node id prefixed with '!'.  Convert here if filter is int.
+                if filters.get("gateway_id") is not None:
+                    gw_val = filters["gateway_id"]
+                    try:
+                        gw_int = int(gw_val)
+                        gw_hex = f"!{gw_int:08x}"
+                    except Exception:
+                        # Assume caller already supplied the string format
+                        gw_hex = str(gw_val)
+                    where_clauses.append("gateway_id = %s")
+                    params.append(gw_hex)
+
+                where_sql = "WHERE " + " AND ".join(where_clauses)
+
+                query = f"""
+                    SELECT
+                        from_node_id,
+                        gateway_id,
+                        COUNT(*)               AS packet_count,
+                        AVG(CAST(rssi AS FLOAT)) AS avg_rssi,
+                        AVG(CAST(snr  AS FLOAT)) AS avg_snr,
+                        MAX(timestamp)         AS last_seen
+                    FROM packet_history
+                    {where_sql}
+                    GROUP BY from_node_id, gateway_id
+                """
+                cursor.execute(query, params)
+                rows = [dict(r) for r in cursor.fetchall()]
+            finally:
+                if cursor:
+                    cursor.close()
                 put_db_connection(conn)
-            except Exception:
-                try:
-                    conn.close()
-                except Exception:
-                    pass
 
             # ------------------------------------------------------------------
             # Convert DB rows into link dictionaries.

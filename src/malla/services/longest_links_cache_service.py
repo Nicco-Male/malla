@@ -41,45 +41,51 @@ class LongestLinksCacheService:
         """
         try:
             conn = get_db_connection()
-            cursor = conn.cursor(cursor_factory=RealDictCursor)
+            cursor = None
+            try:
+                cursor = conn.cursor(cursor_factory=RealDictCursor)
 
-            # Build parameters dict for matching
-            parameters = {
-                "min_distance_km": min_distance_km,
-                "min_snr": min_snr,
-                "max_results": max_results,
-            }
+                # Build parameters dict for matching
+                parameters = {
+                    "min_distance_km": min_distance_km,
+                    "min_snr": min_snr,
+                    "max_results": max_results,
+                }
 
-            # Check for cached entry
-            cursor.execute(
-                """
-                SELECT data, calculated_at
-                FROM cached_longest_links
-                WHERE parameters = %s::jsonb
-                ORDER BY calculated_at DESC
-                LIMIT 1
-                """,
-                (json.dumps(parameters),),
-            )
+                # Check for cached entry
+                cursor.execute(
+                    """
+                    SELECT data, calculated_at
+                    FROM cached_longest_links
+                    WHERE parameters = %s::jsonb
+                    ORDER BY calculated_at DESC
+                    LIMIT 1
+                    """,
+                    (json.dumps(parameters),),
+                )
 
-            row = cursor.fetchone()
-            cursor.close()
-            put_db_connection(conn)
+                row = cursor.fetchone()
 
-            if not row:
-                logger.debug(f"Cache miss for longest links (params: {parameters})")
-                return None
+                if not row:
+                    logger.debug(f"Cache miss for longest links (params: {parameters})")
+                    return None
 
-            # Check if cache is still fresh
-            calculated_at = row["calculated_at"]
-            age_seconds = time.time() - calculated_at.timestamp()
+                # Check if cache is still fresh
+                calculated_at = row["calculated_at"]
+                age_seconds = time.time() - calculated_at.timestamp()
 
-            if age_seconds > LongestLinksCacheService.CACHE_TTL_SECONDS:
-                logger.info(f"Cache expired ({age_seconds:.0f}s old) for longest links")
-                return None
+                if age_seconds > LongestLinksCacheService.CACHE_TTL_SECONDS:
+                    logger.info(
+                        f"Cache expired ({age_seconds:.0f}s old) for longest links"
+                    )
+                    return None
 
-            logger.info(f"Cache hit for longest links (age: {age_seconds:.0f}s)")
-            return row["data"]
+                logger.info(f"Cache hit for longest links (age: {age_seconds:.0f}s)")
+                return row["data"]
+            finally:
+                if cursor:
+                    cursor.close()
+                put_db_connection(conn)
 
         except Exception as e:
             logger.error(f"Error getting cached longest links: {e}")
@@ -106,33 +112,37 @@ class LongestLinksCacheService:
         """
         try:
             conn = get_db_connection()
-            cursor = conn.cursor()
+            cursor = None
+            try:
+                cursor = conn.cursor()
 
-            parameters = {
-                "min_distance_km": min_distance_km,
-                "min_snr": min_snr,
-                "max_results": max_results,
-            }
+                parameters = {
+                    "min_distance_km": min_distance_km,
+                    "min_snr": min_snr,
+                    "max_results": max_results,
+                }
 
-            # Insert or update cache entry
-            cursor.execute(
-                """
-                INSERT INTO cached_longest_links (data, parameters, calculated_at)
-                VALUES (%s::jsonb, %s::jsonb, NOW())
-                ON CONFLICT (parameters)
-                DO UPDATE SET
-                    data = EXCLUDED.data,
-                    calculated_at = NOW()
-                """,
-                (json.dumps(data), json.dumps(parameters)),
-            )
+                # Insert or update cache entry
+                cursor.execute(
+                    """
+                    INSERT INTO cached_longest_links (data, parameters, calculated_at)
+                    VALUES (%s::jsonb, %s::jsonb, NOW())
+                    ON CONFLICT (parameters)
+                    DO UPDATE SET
+                        data = EXCLUDED.data,
+                        calculated_at = NOW()
+                    """,
+                    (json.dumps(data), json.dumps(parameters)),
+                )
 
-            conn.commit()
-            cursor.close()
-            put_db_connection(conn)
+                conn.commit()
 
-            logger.info(f"Stored cached longest links (params: {parameters})")
-            return True
+                logger.info(f"Stored cached longest links (params: {parameters})")
+                return True
+            finally:
+                if cursor:
+                    cursor.close()
+                put_db_connection(conn)
 
         except Exception as e:
             logger.error(f"Error storing cached longest links: {e}")
@@ -148,16 +158,20 @@ class LongestLinksCacheService:
         """
         try:
             conn = get_db_connection()
-            cursor = conn.cursor()
+            cursor = None
+            try:
+                cursor = conn.cursor()
 
-            cursor.execute("DELETE FROM cached_longest_links")
-            deleted_count = cursor.rowcount
-            conn.commit()
-            cursor.close()
-            put_db_connection(conn)
+                cursor.execute("DELETE FROM cached_longest_links")
+                deleted_count = cursor.rowcount
+                conn.commit()
 
-            logger.info(f"Cleared {deleted_count} cached longest links entries")
-            return True
+                logger.info(f"Cleared {deleted_count} cached longest links entries")
+                return True
+            finally:
+                if cursor:
+                    cursor.close()
+                put_db_connection(conn)
 
         except Exception as e:
             logger.error(f"Error clearing cached longest links: {e}")

@@ -135,109 +135,108 @@ class NodeService:
         node_id_int = convert_node_id(node_id)
 
         conn = get_db_connection()
-        cursor = conn.cursor(cursor_factory=RealDictCursor)
-
-        # Get recent traceroute packets (same 7-day window as link analysis)
-        end_time = datetime.now()
-        start_time = end_time - timedelta(days=7)  # Look at last 7 days
-
-        query = """
-            SELECT
-                id,
-                timestamp,
-                from_node_id,
-                to_node_id,
-                gateway_id,
-                hop_start,
-                hop_limit,
-                raw_payload
-            FROM packet_history
-            WHERE portnum_name = 'TRACEROUTE_APP'
-            AND processed_successfully = TRUE
-            AND raw_payload IS NOT NULL
-            AND timestamp >= %s
-            AND timestamp <= %s
-        """
-
-        cursor.execute(query, (start_time.timestamp(), end_time.timestamp()))
-        packets = cursor.fetchall()
-
-        # Track nodes with direct RF hops and their connection counts
-        related_nodes = {}
-
-        for packet in packets:
-            packet_id = packet["id"]
-            timestamp = packet["timestamp"]
-            from_node_id = packet["from_node_id"]
-            to_node_id = packet["to_node_id"]
-            gateway_id = packet["gateway_id"]
-            hop_start = packet["hop_start"]
-            hop_limit = packet["hop_limit"]
-            raw_payload = packet["raw_payload"]
-
-            try:
-                # Create TraceroutePacket to analyze RF hops
-                packet_data = {
-                    "id": packet_id,
-                    "timestamp": timestamp,
-                    "from_node_id": from_node_id,
-                    "to_node_id": to_node_id,
-                    "gateway_id": gateway_id,
-                    "hop_start": hop_start,
-                    "hop_limit": hop_limit,
-                    "raw_payload": raw_payload,
-                }
-
-                tr_packet = TraceroutePacket(packet_data, resolve_names=False)
-
-                # Get all RF hops (both forward and return)
-                rf_hops = tr_packet.get_rf_hops()
-
-                # Check if any RF hop involves our target node
-                for hop in rf_hops:
-                    if hop.from_node_id == node_id_int:
-                        # Target node is the sender in this RF hop
-                        other_node = hop.to_node_id
-                        if other_node not in related_nodes:
-                            related_nodes[other_node] = 0
-                        related_nodes[other_node] += 1
-                    elif hop.to_node_id == node_id_int:
-                        # Target node is the receiver in this RF hop
-                        other_node = hop.from_node_id
-                        if other_node not in related_nodes:
-                            related_nodes[other_node] = 0
-                        related_nodes[other_node] += 1
-
-            except Exception as e:
-                logger.warning(f"Failed to analyze RF hops for packet {packet_id}: {e}")
-                continue
-
-        # Get node info for all related nodes
-        if related_nodes:
-            node_ids = list(related_nodes.keys())
-            placeholders = ",".join(["%s"] * len(node_ids))
-            node_info_query = f"""
-                SELECT
-                    node_id,
-                    long_name,
-                    short_name,
-                    ('!' || lpad(to_hex(node_id), 8, '0')) as hex_id
-                FROM node_info
-                WHERE node_id IN ({placeholders})
-            """
-            cursor.execute(node_info_query, node_ids)
-            node_info_data = {row["node_id"]: row for row in cursor.fetchall()}
-        else:
-            node_info_data = {}
-
-        cursor.close()
+        cursor = None
         try:
+            cursor = conn.cursor(cursor_factory=RealDictCursor)
+
+            # Get recent traceroute packets (same 7-day window as link analysis)
+            end_time = datetime.now()
+            start_time = end_time - timedelta(days=7)  # Look at last 7 days
+
+            query = """
+                SELECT
+                    id,
+                    timestamp,
+                    from_node_id,
+                    to_node_id,
+                    gateway_id,
+                    hop_start,
+                    hop_limit,
+                    raw_payload
+                FROM packet_history
+                WHERE portnum_name = 'TRACEROUTE_APP'
+                AND processed_successfully = TRUE
+                AND raw_payload IS NOT NULL
+                AND timestamp >= %s
+                AND timestamp <= %s
+            """
+
+            cursor.execute(query, (start_time.timestamp(), end_time.timestamp()))
+            packets = cursor.fetchall()
+
+            # Track nodes with direct RF hops and their connection counts
+            related_nodes = {}
+
+            for packet in packets:
+                packet_id = packet["id"]
+                timestamp = packet["timestamp"]
+                from_node_id = packet["from_node_id"]
+                to_node_id = packet["to_node_id"]
+                gateway_id = packet["gateway_id"]
+                hop_start = packet["hop_start"]
+                hop_limit = packet["hop_limit"]
+                raw_payload = packet["raw_payload"]
+
+                try:
+                    # Create TraceroutePacket to analyze RF hops
+                    packet_data = {
+                        "id": packet_id,
+                        "timestamp": timestamp,
+                        "from_node_id": from_node_id,
+                        "to_node_id": to_node_id,
+                        "gateway_id": gateway_id,
+                        "hop_start": hop_start,
+                        "hop_limit": hop_limit,
+                        "raw_payload": raw_payload,
+                    }
+
+                    tr_packet = TraceroutePacket(packet_data, resolve_names=False)
+
+                    # Get all RF hops (both forward and return)
+                    rf_hops = tr_packet.get_rf_hops()
+
+                    # Check if any RF hop involves our target node
+                    for hop in rf_hops:
+                        if hop.from_node_id == node_id_int:
+                            # Target node is the sender in this RF hop
+                            other_node = hop.to_node_id
+                            if other_node not in related_nodes:
+                                related_nodes[other_node] = 0
+                            related_nodes[other_node] += 1
+                        elif hop.to_node_id == node_id_int:
+                            # Target node is the receiver in this RF hop
+                            other_node = hop.from_node_id
+                            if other_node not in related_nodes:
+                                related_nodes[other_node] = 0
+                            related_nodes[other_node] += 1
+
+                except Exception as e:
+                    logger.warning(
+                        f"Failed to analyze RF hops for packet {packet_id}: {e}"
+                    )
+                    continue
+
+            # Get node info for all related nodes
+            if related_nodes:
+                node_ids = list(related_nodes.keys())
+                placeholders = ",".join(["%s"] * len(node_ids))
+                node_info_query = f"""
+                    SELECT
+                        node_id,
+                        long_name,
+                        short_name,
+                        ('!' || lpad(to_hex(node_id), 8, '0')) as hex_id
+                    FROM node_info
+                    WHERE node_id IN ({placeholders})
+                """
+                cursor.execute(node_info_query, node_ids)
+                node_info_data = {row["node_id"]: row for row in cursor.fetchall()}
+            else:
+                node_info_data = {}
+        finally:
+            if cursor:
+                cursor.close()
             put_db_connection(conn)
-        except Exception:
-            try:
-                conn.close()
-            except Exception:
-                pass
 
         # Format the response
         formatted_related_nodes = []
