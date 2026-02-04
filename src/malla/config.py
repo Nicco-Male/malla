@@ -133,17 +133,24 @@ class AppConfig:
                 continue
 
             try:
-                # Try parsing as hex first (with or without ! prefix)
+                # Treat values with "!" or "0x" prefixes as hex. Otherwise, only
+                # parse as hex when letters are present to avoid interpreting
+                # decimal-only IDs as hex.
+                is_hex = False
                 if node_id_str.startswith("!"):
                     node_id_str = node_id_str[1:]
-                # Try hex
-                if all(c in "0123456789abcdefABCDEF" for c in node_id_str):
+                    is_hex = True
+                if node_id_str.lower().startswith("0x"):
+                    node_id_str = node_id_str[2:]
+                    is_hex = True
+                if any(c in "abcdefABCDEF" for c in node_id_str):
+                    is_hex = True
+
+                if is_hex:
                     node_id = int(node_id_str, 16)
-                    ignored_ids.add(node_id)
                 else:
-                    # Try decimal
-                    node_id = int(node_id_str)
-                    ignored_ids.add(node_id)
+                    node_id = int(node_id_str, 10)
+                ignored_ids.add(node_id)
             except ValueError:
                 logger.warning(
                     f"Invalid node ID format in ignored_node_ids: {node_id_str}. Skipping."
