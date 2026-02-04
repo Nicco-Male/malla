@@ -218,7 +218,7 @@ def _ensure_tables(cursor: Any) -> None:
             priority INTEGER,
             delayed INTEGER,
             channel_index INTEGER,
-            rx_time INTEGER,
+            rx_time BIGINT,
             pki_encrypted BOOLEAN,
             next_hop BIGINT,
             relay_node BIGINT,
@@ -341,6 +341,7 @@ def _migration_bigint_ids(cursor: Any) -> None:
         "ALTER TABLE packet_history ALTER COLUMN from_node_id TYPE BIGINT",
         "ALTER TABLE packet_history ALTER COLUMN to_node_id TYPE BIGINT",
         "ALTER TABLE packet_history ALTER COLUMN mesh_packet_id TYPE BIGINT",
+        "ALTER TABLE packet_history ALTER COLUMN rx_time TYPE BIGINT",
         "ALTER TABLE packet_history ALTER COLUMN next_hop TYPE BIGINT",
         "ALTER TABLE packet_history ALTER COLUMN relay_node TYPE BIGINT",
     ]
