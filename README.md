@@ -5,8 +5,10 @@ Malla (Spanish for "mesh") captures Meshtastic MQTT traffic into **PostgreSQL** 
 > **Note**: Malla requires PostgreSQL 13+. SQLite support has been removed except for legacy test fixtures.
 
 ## Running Instances
+Original Map:
 - meshtastic.es (Spain): https://malla.meshtastic.es
 - malla.ctmesh.org (Connecticut): https://malla.ctmesh.org
+My Map:
 - worldmap.niccomale.it (Wold): https://worldmap.niccomale.it
 - europe.niccomale.it (Europe): https://europe.niccomale.it
 - itamap.niccomale.it (Italy): https://itamap.niccomale.it/
