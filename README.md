@@ -8,6 +8,7 @@ Malla (Spanish for "mesh") captures Meshtastic MQTT traffic into **PostgreSQL** 
 Original Map:
 - meshtastic.es (Spain): https://malla.meshtastic.es
 - malla.ctmesh.org (Connecticut): https://malla.ctmesh.org
+
 My Map:
 - worldmap.niccomale.it (Wold): https://worldmap.niccomale.it
 - europe.niccomale.it (Europe): https://europe.niccomale.it
