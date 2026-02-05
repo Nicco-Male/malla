@@ -99,9 +99,9 @@ class RelayNodeAnalysis {
 
             // Avg RSSI column
             const rssiCell = document.createElement('td');
-            if (stat.avg_rssi !== null && stat.avg_rssi !== undefined) {
-                const rssiValue = stat.avg_rssi.toFixed(1);
-                rssiCell.innerHTML = `<span class="text-muted">${rssiValue} dBm</span>`;
+            const rssiValue = Number(stat.avg_rssi);
+            if (Number.isFinite(rssiValue)) {
+                rssiCell.innerHTML = `<span class="text-muted">${rssiValue.toFixed(1)} dBm</span>`;
             } else {
                 rssiCell.innerHTML = '<span class="text-muted">-</span>';
             }
@@ -109,9 +109,9 @@ class RelayNodeAnalysis {
 
             // Avg SNR column
             const snrCell = document.createElement('td');
-            if (stat.avg_snr !== null && stat.avg_snr !== undefined) {
-                const snrValue = stat.avg_snr.toFixed(1);
-                snrCell.innerHTML = `<span class="text-muted">${snrValue} dB</span>`;
+            const snrValue = Number(stat.avg_snr);
+            if (Number.isFinite(snrValue)) {
+                snrCell.innerHTML = `<span class="text-muted">${snrValue.toFixed(1)} dB</span>`;
             } else {
                 snrCell.innerHTML = '<span class="text-muted">-</span>';
             }
