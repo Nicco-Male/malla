@@ -2195,7 +2195,7 @@ class NodeRepository:
                 SELECT
                     relay_node,
                     COUNT(*) as count,
-                    AVG(rssi) as avg_rssi,
+                    AVG(CAST(rssi AS FLOAT)) as avg_rssi,
                     AVG(snr) as avg_snr,
                     MIN(rssi) as min_rssi,
                     MAX(rssi) as max_rssi,
@@ -2245,7 +2245,11 @@ class NodeRepository:
                             "relay_node": relay_value,
                             "relay_hex": f"{relay_last_byte:02x}",
                             "count": relay_row["count"],
-                            "avg_rssi": relay_row["avg_rssi"],
+                            "avg_rssi": (
+                                float(relay_row["avg_rssi"])
+                                if relay_row["avg_rssi"] is not None
+                                else None
+                            ),
                             "avg_snr": relay_row["avg_snr"],
                             "min_rssi": relay_row["min_rssi"],
                             "max_rssi": relay_row["max_rssi"],
