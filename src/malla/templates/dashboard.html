@@ -322,12 +322,12 @@
     </div>
 </div>
 
-<!-- Top Active Nodes Row -->
+<!-- Wall of Spamming & Misconfig Signals Row -->
 <div class="row mb-4">
-    <div class="col-12">
-        <div class="card">
+    <div class="col-lg-6 mb-4">
+        <div class="card h-100">
             <div class="card-header">
-                <h5 class="card-title mb-0"><i class="bi bi-trophy"></i> Most Active Nodes</h5>
+                <h5 class="card-title mb-0"><i class="bi bi-trophy"></i> Wall of Spamming</h5>
             </div>
             <div class="card-body">
                 <div id="topNodesLoading" class="text-center py-4">
@@ -348,6 +348,46 @@
                             <!-- Data will be populated by JavaScript -->
                         </tbody>
                     </table>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-6 mb-4">
+        <div class="card h-100">
+            <div class="card-header">
+                <h5 class="card-title mb-0"><i class="bi bi-exclamation-triangle"></i> Nodi potenzialmente
+                    malconfigurati</h5>
+            </div>
+            <div class="card-body">
+                <div class="alert alert-warning small mb-3" role="alert">
+                    <strong>Indicazioni operative:</strong>
+                    riduci la periodicità di NODEINFO/ROUTING se troppo ravvicinata, verifica eventuali loop di boot o
+                    reset ripetuti, e controlla le impostazioni di trasmissione per evitare duplicati entro pochi
+                    secondi.
+                </div>
+                <div id="misconfigNodesLoading" class="text-center py-4">
+                    <div class="spinner-border text-warning" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                </div>
+                <div class="table-responsive" style="display: none;" id="misconfigNodesTableContainer">
+                    <table class="table table-sm" id="misconfigNodesTable">
+                        <thead>
+                            <tr>
+                                <th>Node</th>
+                                <th>Motivo</th>
+                                <th>Burst</th>
+                                <th>Intervallo medio</th>
+                                <th>Ultima occorrenza</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <!-- Data will be populated by JavaScript -->
+                        </tbody>
+                    </table>
+                    <div class="text-muted small" id="misconfigNodesEmpty" style="display: none;">
+                        Nessun nodo con segnali di misconfigurazione nel periodo selezionato.
+                    </div>
                 </div>
             </div>
         </div>
@@ -472,6 +512,7 @@
     let chartInstances = {}; // Store chart instances for theme updates
     let autoRefreshTimer = null;
     let analyticsHours = 24;
+    let misconfigNodes = null;
 
     // Get theme-aware colors for charts
     function getChartColors() {
@@ -679,6 +720,7 @@
             createHopDistributionChart(analyticsData.temporal_patterns);
             createPacketTypesChart(analyticsData.packet_types);
             populateTopNodesTable(analyticsData.top_nodes);
+            loadMisconfigNodes();
 
             // Update KPI trend indicators based on temporal patterns
             updateKpiTrends(analyticsData.temporal_patterns);
@@ -766,6 +808,26 @@
             renderDashboardChannelsChart(data || {});
         } catch (error) {
             console.error('Failed to load dashboard channel stats:', error);
+        }
+    }
+
+    async function loadMisconfigNodes() {
+        try {
+            const baseUrl = new URL('/api/stats/misconfig-nodes', window.location.origin);
+            if (analyticsHours && Number.isFinite(analyticsHours)) {
+                baseUrl.searchParams.set('hours', String(analyticsHours));
+            }
+            const response = await fetch(baseUrl.toString());
+            if (!response.ok) {
+                throw new Error(`HTTP error loading misconfig nodes: ${response.status}`);
+            }
+            const payload = await response.json();
+            misconfigNodes = (payload && payload.nodes) || [];
+            populateMisconfigNodesTable(misconfigNodes);
+        } catch (error) {
+            console.error('Error loading misconfig nodes:', error);
+            const loading = document.getElementById('misconfigNodesLoading');
+            if (loading) loading.style.display = 'none';
         }
     }
 
@@ -1155,6 +1217,48 @@
             <td><span class="badge bg-primary">${node.packet_count || 0}</span></td>
             <td><span class="${signalClass}">${signalText}</span></td>
         `;
+
+            tbody.appendChild(row);
+        });
+    }
+
+    function populateMisconfigNodesTable(nodes) {
+        const loading = document.getElementById('misconfigNodesLoading');
+        const container = document.getElementById('misconfigNodesTableContainer');
+        const tbody = document.querySelector('#misconfigNodesTable tbody');
+        const emptyMessage = document.getElementById('misconfigNodesEmpty');
+
+        if (loading) loading.style.display = 'none';
+        if (!container || !tbody) return;
+
+        tbody.innerHTML = '';
+        container.style.display = 'block';
+
+        if (!nodes || nodes.length === 0) {
+            if (emptyMessage) emptyMessage.style.display = 'block';
+            return;
+        }
+
+        if (emptyMessage) emptyMessage.style.display = 'none';
+
+        nodes.slice(0, 10).forEach(node => {
+            const row = document.createElement('tr');
+            const nodeName = node.display_name || `!${node.node_id.toString(16).padStart(8, '0')}`;
+            const nodeLink = `/node/${node.node_id}`;
+            const avgIntervalText = node.avg_interval ? `${node.avg_interval.toFixed(1)}s` : 'N/D';
+            const lastSeenText = node.last_seen
+                ? new Date(node.last_seen * 1000).toLocaleString('it-IT')
+                : 'N/D';
+            const burstText = node.burst_count || 0;
+            const reasonText = node.reason || 'Segnali sospetti';
+
+            row.innerHTML = `
+                <td><a href="${nodeLink}" class="text-decoration-none">${nodeName}</a></td>
+                <td>${reasonText}</td>
+                <td><span class="badge bg-warning text-dark">${burstText}</span></td>
+                <td>${avgIntervalText}</td>
+                <td>${lastSeenText}</td>
+            `;
 
             tbody.appendChild(row);
         });

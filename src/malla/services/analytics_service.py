@@ -4,7 +4,7 @@ Analytics service for Meshtastic Mesh Health Web UI
 
 import logging
 import time
-from collections import defaultdict
+from collections import defaultdict, deque
 from typing import Any
 
 from psycopg2.extras import RealDictCursor
@@ -696,6 +696,160 @@ class AnalyticsService:
             )
 
         return top_nodes
+
+    @staticmethod
+    def _get_misconfig_signals(
+        filters: dict, since_timestamp: float
+    ) -> list[dict[str, Any]]:
+        """Detect nodes with suspicious NODEINFO/ROUTING pacing patterns."""
+        from ..database.connection import get_db_connection, put_db_connection
+
+        burst_window_seconds = 30
+        burst_min_count = 5
+        aggressive_interval_seconds = 15
+        repeat_threshold_seconds = 5
+
+        where_conditions: list[str] = [
+            "ph.timestamp >= %s",
+            "ph.from_node_id IS NOT NULL",
+            "ph.portnum_name = ANY(%s)",
+        ]
+        params: list[Any] = [
+            since_timestamp,
+            ["NODEINFO_APP", "ROUTING_APP"],
+        ]
+
+        if filters.get("gateway_id"):
+            where_conditions.append("ph.gateway_id = %s")
+            params.append(filters["gateway_id"])
+
+        where_clause = " AND ".join(where_conditions)
+
+        query = f"""
+            SELECT
+                ph.from_node_id AS node_id,
+                ph.portnum_name,
+                ph.timestamp,
+                ni.long_name,
+                ni.short_name
+            FROM packet_history ph
+            LEFT JOIN node_info ni ON ph.from_node_id = ni.node_id
+            WHERE {where_clause}
+            ORDER BY ph.from_node_id, ph.timestamp
+        """
+
+        conn = None
+        cursor = None
+        try:
+            conn = get_db_connection()
+            cursor = conn.cursor(cursor_factory=RealDictCursor)
+            cursor.execute(query, params)
+            rows = cursor.fetchall() or []
+        finally:
+            if cursor:
+                cursor.close()
+            if conn:
+                try:
+                    put_db_connection(conn)
+                except Exception:
+                    try:
+                        conn.close()
+                    except Exception:
+                        pass
+
+        node_events: dict[int, dict[str, Any]] = defaultdict(
+            lambda: {"events": [], "long_name": None, "short_name": None}
+        )
+        for row in rows:
+            node_id = row.get("node_id")
+            if node_id is None:
+                continue
+            entry = node_events[node_id]
+            entry["events"].append(
+                (float(row["timestamp"]), row.get("portnum_name") or "")
+            )
+            if row.get("long_name"):
+                entry["long_name"] = row["long_name"]
+            if row.get("short_name"):
+                entry["short_name"] = row["short_name"]
+
+        suspicious_nodes: list[dict[str, Any]] = []
+        for node_id, data in node_events.items():
+            events = sorted(data["events"], key=lambda item: item[0])
+            if len(events) < 2:
+                continue
+
+            last_seen = events[-1][0]
+            intervals = [
+                events[idx][0] - events[idx - 1][0]
+                for idx in range(1, len(events))
+            ]
+            avg_interval = (
+                sum(intervals) / len(intervals) if intervals else None
+            )
+
+            burst_count = 0
+            window = deque()
+            for timestamp, _port in events:
+                window.append(timestamp)
+                while window and timestamp - window[0] > burst_window_seconds:
+                    window.popleft()
+                if len(window) == burst_min_count:
+                    burst_count += 1
+
+            repeated_count = 0
+            prev_timestamp, prev_port = events[0]
+            for timestamp, port in events[1:]:
+                if (
+                    port == prev_port
+                    and timestamp - prev_timestamp <= repeat_threshold_seconds
+                ):
+                    repeated_count += 1
+                prev_timestamp, prev_port = timestamp, port
+
+            reasons: list[str] = []
+            if burst_count > 0:
+                reasons.append(
+                    f"burst di NODEINFO/ROUTING (≥{burst_min_count} messaggi in {burst_window_seconds}s)"
+                )
+            if avg_interval is not None and avg_interval <= aggressive_interval_seconds:
+                reasons.append(
+                    f"pacing molto aggressivo (media {avg_interval:.1f}s)"
+                )
+            if repeated_count > 0:
+                reasons.append(
+                    f"messaggi ripetuti entro {repeat_threshold_seconds}s ({repeated_count} volte)"
+                )
+
+            if not reasons:
+                continue
+
+            display_name = data.get("long_name") or data.get("short_name")
+            if not display_name:
+                display_name = f"!{node_id:08x}"
+
+            suspicious_nodes.append(
+                {
+                    "node_id": node_id,
+                    "display_name": display_name,
+                    "reason": "; ".join(reasons),
+                    "burst_count": burst_count,
+                    "avg_interval": avg_interval,
+                    "last_seen": last_seen,
+                    "repeat_count": repeated_count,
+                }
+            )
+
+        suspicious_nodes.sort(
+            key=lambda item: (
+                -(item.get("burst_count") or 0),
+                item.get("avg_interval") or float("inf"),
+                -(item.get("repeat_count") or 0),
+                -(item.get("last_seen") or 0),
+            )
+        )
+
+        return suspicious_nodes[:20]
 
     @staticmethod
     def _get_node_rankings(

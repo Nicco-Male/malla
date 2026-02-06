@@ -129,6 +129,24 @@ def api_stats():
         return jsonify({"error": str(e)}), 500
 
 
+@api_bp.route("/stats/misconfig-nodes")
+def get_misconfig_nodes():
+    """Get nodes with suspicious NODEINFO/ROUTING pacing patterns."""
+    try:
+        gateway_id = request.args.get("gateway_id")
+        hours = request.args.get("hours", 24, type=int)
+        filters = {}
+        if gateway_id:
+            filters["gateway_id"] = gateway_id
+
+        since = time.time() - (hours * 3600)
+        nodes = AnalyticsService._get_misconfig_signals(filters, since)
+        return safe_jsonify({"nodes": nodes, "hours": hours, "since": since})
+    except Exception as e:
+        logger.error(f"Error getting misconfig nodes: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
 @api_bp.route("/meshtastic/hardware-models")
 def api_hardware_models():
     """API endpoint for available hardware models from Meshtastic protobuf."""
