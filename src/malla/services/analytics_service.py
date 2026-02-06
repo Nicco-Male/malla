@@ -818,7 +818,7 @@ class AnalyticsService:
                 SELECT
                     ntl.node_id,
                     ntl.temperature,
-                    ntl.last_updated,
+                    EXTRACT(EPOCH FROM ntl.last_updated) AS last_seen,
                     ni.long_name,
                     ni.short_name,
                     ni.hw_model
@@ -840,12 +840,16 @@ class AnalyticsService:
                     display_name = row.get("long_name") or row.get("short_name")
                     if not display_name:
                         display_name = f"!{node_id:08x}"
+                    last_seen = row.get("last_seen")
                     ranked_nodes.append(
                         {
                             "node_id": node_id,
                             "display_name": display_name,
                             "temperature": round(row.get("temperature") or 0.0, 1),
                             "temperature_count": 1,
+                            "last_seen": float(last_seen)
+                            if last_seen is not None
+                            else None,
                             "hw_model": row.get("hw_model"),
                         }
                     )
@@ -896,6 +900,7 @@ class AnalyticsService:
 
             node_temperatures: dict[int, list[float]] = {}
             node_info: dict[int, dict[str, Any]] = {}
+            node_last_seen: dict[int, float] = {}
             decode_success_count = 0
             decode_fail_count = 0
             temperature_found_count = 0
@@ -904,6 +909,12 @@ class AnalyticsService:
                 node_id = row.get("node_id")
                 if not node_id:
                     continue
+                timestamp = row.get("timestamp")
+                if timestamp is not None:
+                    node_last_seen[node_id] = max(
+                        float(timestamp),
+                        node_last_seen.get(node_id, float("-inf")),
+                    )
 
                 if node_id not in node_info:
                     node_info[node_id] = {
@@ -965,6 +976,7 @@ class AnalyticsService:
                         "display_name": display_name,
                         "temperature": round(avg_temp, 1),
                         "temperature_count": len(node_temperatures[node_id]),
+                        "last_seen": node_last_seen.get(node_id),
                         "hw_model": info.get("hw_model"),
                     }
                 )
