@@ -262,6 +262,7 @@ def _ensure_schema_migrations(cursor: Any) -> None:
         "packet_indexes": _migration_packet_indexes,
         "cached_longest_links": _migration_cached_longest_links,
         "node_telemetry_latest": _migration_node_telemetry_latest,
+        "spam_detection_support": _migration_spam_detection_support,
     }
 
     for name, func in migrations.items():
@@ -441,5 +442,55 @@ def _migration_node_telemetry_latest(cursor: Any) -> None:
         """
         CREATE INDEX IF NOT EXISTS idx_node_telemetry_latest_updated
         ON node_telemetry_latest(last_updated DESC)
+        """
+    )
+
+
+def _migration_spam_detection_support(cursor: Any) -> None:
+    """Ensure spam detection support tables/views exist."""
+    cursor.execute("CREATE EXTENSION IF NOT EXISTS pgcrypto")
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS blocklist (
+            id SERIAL PRIMARY KEY,
+            node_id BIGINT NOT NULL,
+            reason TEXT,
+            auto_blocked BOOLEAN DEFAULT FALSE,
+            metrics JSONB,
+            created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+            updated_at TIMESTAMP NOT NULL DEFAULT NOW(),
+            CONSTRAINT blocklist_unique_node UNIQUE (node_id)
+        )
+        """
+    )
+    cursor.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_blocklist_node_id
+        ON blocklist(node_id)
+        """
+    )
+    cursor.execute(
+        """
+        CREATE MATERIALIZED VIEW IF NOT EXISTS packet_duplicates_recent AS
+        SELECT
+            from_node_id,
+            COALESCE(mesh_packet_id::TEXT, encode(digest(raw_payload, 'sha256'), 'hex')) AS payload_key,
+            COUNT(*) AS duplicate_count,
+            MIN(timestamp) AS first_seen_ts,
+            MAX(timestamp) AS last_seen_ts
+        FROM packet_history
+        WHERE from_node_id IS NOT NULL
+          AND timestamp >= EXTRACT(EPOCH FROM NOW() - INTERVAL '1 day')
+          AND (
+              mesh_packet_id IS NOT NULL
+              OR raw_payload IS NOT NULL
+          )
+        GROUP BY from_node_id, payload_key
+        """
+    )
+    cursor.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_packet_duplicates_recent_lookup
+        ON packet_duplicates_recent(from_node_id, payload_key)
         """
     )

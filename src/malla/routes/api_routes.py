@@ -30,6 +30,7 @@ from ..services.gateway_service import GatewayService
 from ..services.location_service import LocationService
 from ..services.meshtastic_service import MeshtasticService
 from ..services.node_service import NodeService
+from ..services.spam_detection_service import SpamDetectionService
 from ..services.traceroute_service import TracerouteService
 from ..utils.export_utils import (
     generate_csv,
@@ -243,6 +244,77 @@ def get_top_humidity_nodes():
     except Exception as e:
         logger.error(f"Error getting top humidity nodes: {e}")
         return jsonify({"error": str(e)}), 500
+
+
+@api_bp.route("/spam/metrics")
+def get_spam_metrics():
+    """Get spam metrics and optionally auto-block nodes that exceed thresholds."""
+    try:
+        gateway_id = request.args.get("gateway_id")
+        from_node = request.args.get("from_node", type=int)
+        since_seconds = request.args.get("since_seconds", 24 * 3600, type=int)
+        auto_block = request.args.get("auto_block", "true").lower() in {
+            "1",
+            "true",
+            "yes",
+            "on",
+        }
+
+        conn = get_db_connection()
+        try:
+            SpamDetectionService.maybe_refresh_duplicate_materialized_view(conn)
+            metrics = SpamDetectionService.get_spam_metrics(
+                conn,
+                gateway_id=gateway_id,
+                from_node=from_node,
+                since_seconds=since_seconds,
+            )
+            blocked = (
+                SpamDetectionService.evaluate_and_block(
+                    conn, gateway_id=gateway_id, from_node=from_node
+                )
+                if auto_block
+                else []
+            )
+            return safe_jsonify({"metrics": metrics, "blocked": blocked})
+        finally:
+            put_db_connection(conn)
+    except Exception as e:
+        logger.error(f"Error getting spam metrics: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@api_bp.route("/blocklist")
+def get_blocklist():
+    """Get blocklist entries for the wall of block."""
+    try:
+        limit = request.args.get("limit", 100, type=int)
+        include_metrics = request.args.get("include_metrics", "true").lower() in {
+            "1",
+            "true",
+            "yes",
+            "on",
+        }
+        auto_block = request.args.get("auto_block", "true").lower() in {
+            "1",
+            "true",
+            "yes",
+            "on",
+        }
+
+        conn = get_db_connection()
+        try:
+            if auto_block:
+                SpamDetectionService.evaluate_and_block(conn)
+            entries = SpamDetectionService.get_blocklist_entries(
+                conn, limit=limit, include_metrics=include_metrics
+            )
+            return safe_jsonify({"blocklist": entries})
+        finally:
+            put_db_connection(conn)
+    except Exception as e:
+        logger.error(f"Error getting blocklist: {e}")
+        return jsonify({"error": str(e), "blocklist": []}), 500
 
 
 @api_bp.route("/stats/telemetry/voltage")

@@ -89,6 +89,15 @@ class AppConfig:
     # OpenTelemetry settings
     otlp_endpoint: str | None = None
 
+    # Spam detection settings
+    spam_auto_block_enabled: bool = True
+    spam_rate_threshold_5m_per_minute: float = 20.0
+    spam_rate_threshold_1h_per_minute: float = 10.0
+    spam_rate_threshold_24h_per_minute: float = 2.0
+    spam_duplicate_window_seconds: int = 300
+    spam_duplicate_threshold: int = 5
+    spam_duplicate_view_refresh_seconds: int = 60
+
     # Internal attribute to remember the source file used
     _config_path: Path | None = field(default=None, repr=False, compare=False)
 
