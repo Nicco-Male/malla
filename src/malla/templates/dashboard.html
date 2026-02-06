@@ -354,6 +354,63 @@
     </div>
 </div>
 
+<!-- Wall of Spamming -->
+<div class="row mb-4">
+    <div class="col-lg-8 mb-4">
+        <div class="card h-100">
+            <div class="card-header">
+                <h5 class="card-title mb-0"><i class="bi bi-megaphone"></i> Wall of Spamming</h5>
+            </div>
+            <div class="card-body">
+                <div id="spamWallLoading" class="text-center py-4">
+                    <div class="spinner-border text-danger" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                </div>
+                <div id="spamWallEmpty" class="text-center text-muted py-4" style="display: none;">
+                    <i class="bi bi-inbox" style="font-size: 2.5rem;"></i>
+                    <p class="mt-2 mb-0">Nessun nodo con traffico anomalo nella finestra selezionata.</p>
+                </div>
+                <div class="table-responsive" style="display: none;" id="spamWallTableContainer">
+                    <table class="table table-sm align-middle" id="spamWallTable">
+                        <thead>
+                            <tr>
+                                <th>Node</th>
+                                <th>Messaggi/ora</th>
+                                <th>Totale</th>
+                                <th>% Unknown</th>
+                                <th>Ultimo visto</th>
+                                <th>RSSI/SNR</th>
+                                <th>App principali</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <!-- Data will be populated by JavaScript -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-4 mb-4">
+        <div class="card h-100 border-danger">
+            <div class="card-header bg-danger-subtle">
+                <h6 class="card-title mb-0 text-danger"><i class="bi bi-exclamation-triangle"></i> Perché lo spam danneggia la rete</h6>
+            </div>
+            <div class="card-body">
+                <p class="mb-2">
+                    Lo spam aumenta l'occupazione del canale radio, riducendo il tempo disponibile per messaggi utili.
+                    Quando il canale è saturo crescono le collisioni e la perdita di pacchetti.
+                </p>
+                <p class="mb-0">
+                    Più trasmissioni superflue significano anche degradazione dei valori RSSI/SNR percepiti dai nodi,
+                    con conseguente peggioramento della qualità dei link e maggiore ritrasmissione.
+                </p>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- Network Information Cards -->
 <div class="row mb-4">
     <div class="col-md-4">
@@ -679,6 +736,7 @@
             createHopDistributionChart(analyticsData.temporal_patterns);
             createPacketTypesChart(analyticsData.packet_types);
             populateTopNodesTable(analyticsData.top_nodes);
+            loadSpamWallData();
 
             // Update KPI trend indicators based on temporal patterns
             updateKpiTrends(analyticsData.temporal_patterns);
@@ -744,6 +802,44 @@
 
         trendEl.className = `small mt-1 ${textClass}`;
         trendEl.innerHTML = `<i class="bi ${iconClass} me-1"></i>${Math.abs(pctChange).toFixed(1)}% vs earlier period`;
+    }
+
+    async function loadSpamWallData() {
+        const loadingEl = document.getElementById('spamWallLoading');
+        const tableContainer = document.getElementById('spamWallTableContainer');
+        const emptyEl = document.getElementById('spamWallEmpty');
+
+        if (loadingEl) {
+            loadingEl.style.display = 'block';
+        }
+        if (tableContainer) {
+            tableContainer.style.display = 'none';
+        }
+        if (emptyEl) {
+            emptyEl.style.display = 'none';
+        }
+
+        try {
+            const url = new URL('/api/stats/spam-wall', window.location.origin);
+            if (analyticsHours && Number.isFinite(analyticsHours)) {
+                url.searchParams.set('hours', String(analyticsHours));
+            }
+            const response = await fetch(url.toString());
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            const data = await response.json();
+            populateSpamWallTable(data.nodes || []);
+        } catch (error) {
+            console.error('Failed to load spam wall data:', error);
+            if (loadingEl) {
+                loadingEl.style.display = 'none';
+            }
+            if (emptyEl) {
+                emptyEl.style.display = 'block';
+                emptyEl.innerHTML = '<p class="mt-2 mb-0 text-danger">Impossibile caricare i dati dello spam wall.</p>';
+            }
+        }
     }
 
     // Load channel stats for dashboard's channel utilization chart
@@ -1154,6 +1250,68 @@
             <td><a href="${nodeLink}" class="text-decoration-none">${nodeName}</a></td>
             <td><span class="badge bg-primary">${node.packet_count || 0}</span></td>
             <td><span class="${signalClass}">${signalText}</span></td>
+        `;
+
+            tbody.appendChild(row);
+        });
+    }
+
+    function populateSpamWallTable(nodes) {
+        const loadingEl = document.getElementById('spamWallLoading');
+        const tableContainer = document.getElementById('spamWallTableContainer');
+        const emptyEl = document.getElementById('spamWallEmpty');
+        const tbody = document.querySelector('#spamWallTable tbody');
+
+        if (loadingEl) {
+            loadingEl.style.display = 'none';
+        }
+        if (!tbody) return;
+
+        tbody.innerHTML = '';
+
+        if (!nodes || nodes.length === 0) {
+            if (tableContainer) {
+                tableContainer.style.display = 'none';
+            }
+            if (emptyEl) {
+                emptyEl.style.display = 'block';
+            }
+            return;
+        }
+
+        if (tableContainer) {
+            tableContainer.style.display = 'block';
+        }
+        if (emptyEl) {
+            emptyEl.style.display = 'none';
+        }
+
+        const formatNumber = (value, digits = 1) => {
+            if (value === null || value === undefined || Number.isNaN(value)) {
+                return '—';
+            }
+            return Number(value).toFixed(digits);
+        };
+
+        nodes.forEach(node => {
+            const row = document.createElement('tr');
+            const nodeName = node.display_name || `!${node.node_id.toString(16).padStart(8, '0')}`;
+            const nodeLink = `/node/${node.node_id}`;
+            const lastSeen = node.last_seen ? new Date(node.last_seen * 1000).toLocaleString() : '—';
+            const rssi = formatNumber(node.avg_rssi, 1);
+            const snr = formatNumber(node.avg_snr, 1);
+            const breakdown = Array.isArray(node.port_breakdown)
+                ? node.port_breakdown.slice(0, 3).map(item => `${item.portnum_name} (${item.count})`).join(', ')
+                : '—';
+
+            row.innerHTML = `
+            <td><a href="${nodeLink}" class="text-decoration-none">${nodeName}</a></td>
+            <td><span class="badge bg-danger-subtle text-danger">${formatNumber(node.rate_per_hour, 2)}</span></td>
+            <td>${node.packet_count || 0}</td>
+            <td>${formatNumber(node.unknown_percentage, 1)}%</td>
+            <td>${lastSeen}</td>
+            <td>${rssi} dBm / ${snr} dB</td>
+            <td class="text-muted small">${breakdown}</td>
         `;
 
             tbody.appendChild(row);

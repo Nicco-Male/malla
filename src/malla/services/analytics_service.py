@@ -698,6 +698,166 @@ class AnalyticsService:
         return top_nodes
 
     @staticmethod
+    def _get_spammy_nodes(
+        filters: dict, since_timestamp: float, hours: int, limit: int = 10
+    ) -> list[dict[str, Any]]:
+        """Get nodes ranked by message rate with port usage breakdown."""
+        from ..database.connection import get_db_connection, put_db_connection
+
+        conn = None
+        cursor = None
+        try:
+            where_conditions: list[str] = [
+                "ph.timestamp >= %s",
+                "ph.from_node_id IS NOT NULL",
+            ]
+            params: list[Any] = [since_timestamp]
+
+            if filters.get("gateway_id"):
+                where_conditions.append("ph.gateway_id = %s")
+                params.append(filters["gateway_id"])
+
+            where_clause = " AND ".join(where_conditions)
+
+            query = f"""
+                SELECT
+                    ph.from_node_id AS node_id,
+                    COALESCE(NULLIF(ph.portnum_name, ''), 'UNKNOWN_APP') AS portnum_name,
+                    COUNT(*) AS packet_count,
+                    SUM(CASE WHEN ph.rssi IS NOT NULL AND ph.rssi != 0
+                        THEN CAST(ph.rssi AS FLOAT) ELSE 0 END) AS rssi_sum,
+                    COUNT(CASE WHEN ph.rssi IS NOT NULL AND ph.rssi != 0 THEN 1 END) AS rssi_count,
+                    SUM(CASE WHEN ph.snr IS NOT NULL
+                        THEN CAST(ph.snr AS FLOAT) ELSE 0 END) AS snr_sum,
+                    COUNT(CASE WHEN ph.snr IS NOT NULL THEN 1 END) AS snr_count,
+                    MAX(ph.timestamp) AS last_seen,
+                    MAX(ni.long_name) AS long_name,
+                    MAX(ni.short_name) AS short_name,
+                    MAX(ni.hw_model) AS hw_model
+                FROM packet_history ph
+                LEFT JOIN node_info ni ON ph.from_node_id = ni.node_id
+                WHERE {where_clause}
+                GROUP BY ph.from_node_id, portnum_name
+            """
+
+            conn = get_db_connection()
+            cursor = conn.cursor(cursor_factory=RealDictCursor)
+            cursor.execute(query, params)
+            rows = cursor.fetchall() or []
+        finally:
+            if cursor:
+                cursor.close()
+            if conn:
+                try:
+                    put_db_connection(conn)
+                except Exception:
+                    try:
+                        conn.close()
+                    except Exception:
+                        pass
+
+        per_node: dict[int, dict[str, Any]] = {}
+        window_hours = max(1, hours)
+        for row in rows:
+            node_id = row.get("node_id")
+            if node_id is None:
+                continue
+
+            portnum_name = row.get("portnum_name") or "UNKNOWN_APP"
+            packet_count = int(row.get("packet_count") or 0)
+            node_entry = per_node.setdefault(
+                node_id,
+                {
+                    "node_id": node_id,
+                    "display_name": None,
+                    "packet_count": 0,
+                    "unknown_count": 0,
+                    "port_breakdown": {},
+                    "last_seen": None,
+                    "rssi_sum": 0.0,
+                    "rssi_count": 0,
+                    "snr_sum": 0.0,
+                    "snr_count": 0,
+                    "hw_model": row.get("hw_model"),
+                },
+            )
+
+            display_name = row.get("long_name") or row.get("short_name")
+            if display_name:
+                node_entry["display_name"] = display_name
+            node_entry["packet_count"] += packet_count
+            node_entry["port_breakdown"][portnum_name] = (
+                node_entry["port_breakdown"].get(portnum_name, 0) + packet_count
+            )
+            if portnum_name == "UNKNOWN_APP":
+                node_entry["unknown_count"] += packet_count
+            last_seen = row.get("last_seen")
+            if last_seen is not None:
+                existing_last_seen = node_entry["last_seen"]
+                node_entry["last_seen"] = (
+                    max(float(last_seen), existing_last_seen)
+                    if existing_last_seen is not None
+                    else float(last_seen)
+                )
+            node_entry["rssi_sum"] += float(row.get("rssi_sum") or 0.0)
+            node_entry["rssi_count"] += int(row.get("rssi_count") or 0)
+            node_entry["snr_sum"] += float(row.get("snr_sum") or 0.0)
+            node_entry["snr_count"] += int(row.get("snr_count") or 0)
+
+        ranked_nodes: list[dict[str, Any]] = []
+        for node_id, node_entry in per_node.items():
+            display_name = node_entry["display_name"]
+            if not display_name:
+                display_name = f"!{node_id:08x}"
+
+            total_packets = node_entry["packet_count"]
+            unknown_count = node_entry["unknown_count"]
+            unknown_pct = (
+                (unknown_count / total_packets * 100) if total_packets > 0 else 0.0
+            )
+            avg_rssi = (
+                node_entry["rssi_sum"] / node_entry["rssi_count"]
+                if node_entry["rssi_count"] > 0
+                else None
+            )
+            avg_snr = (
+                node_entry["snr_sum"] / node_entry["snr_count"]
+                if node_entry["snr_count"] > 0
+                else None
+            )
+
+            breakdown_items = [
+                {
+                    "portnum_name": portnum,
+                    "count": count,
+                    "percentage": round((count / total_packets * 100), 2)
+                    if total_packets > 0
+                    else 0.0,
+                }
+                for portnum, count in node_entry["port_breakdown"].items()
+            ]
+            breakdown_items.sort(key=lambda item: item["count"], reverse=True)
+
+            ranked_nodes.append(
+                {
+                    "node_id": node_id,
+                    "display_name": display_name,
+                    "packet_count": total_packets,
+                    "rate_per_hour": round(total_packets / window_hours, 2),
+                    "unknown_count": unknown_count,
+                    "unknown_percentage": round(unknown_pct, 2),
+                    "last_seen": node_entry["last_seen"],
+                    "avg_rssi": round(avg_rssi, 2) if avg_rssi is not None else None,
+                    "avg_snr": round(avg_snr, 2) if avg_snr is not None else None,
+                    "port_breakdown": breakdown_items,
+                    "hw_model": node_entry["hw_model"],
+                }
+            )
+
+        ranked_nodes.sort(key=lambda item: item["rate_per_hour"], reverse=True)
+        return ranked_nodes[:limit]
+
+    @staticmethod
     def _get_node_rankings(
         filters: dict, since_timestamp: float, order: str = "DESC", limit: int = 10
     ) -> list[dict[str, Any]]:

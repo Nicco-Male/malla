@@ -459,6 +459,25 @@ def get_top_channel_utilizers():
         return jsonify({"error": str(e)}), 500
 
 
+@api_bp.route("/stats/spam-wall")
+def get_spam_wall():
+    """Get ranked nodes by spammy message rate."""
+    try:
+        gateway_id = request.args.get("gateway_id")
+        hours = request.args.get("hours", 24, type=int)
+
+        filters = {}
+        if gateway_id:
+            filters["gateway_id"] = gateway_id
+
+        since = time.time() - (hours * 3600)
+        nodes = AnalyticsService._get_spammy_nodes(filters, since, hours, limit=10)
+        return safe_jsonify({"hours": hours, "nodes": nodes})
+    except Exception as e:
+        logger.error(f"Error getting spam wall data: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
 @api_bp.route("/stats/channels")
 def get_channel_stats():
     """Get channel activity statistics."""
