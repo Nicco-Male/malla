@@ -7,6 +7,7 @@ import logging
 import re
 import threading
 import time
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from flask import Blueprint, Response, jsonify, request, stream_with_context
@@ -108,6 +109,21 @@ def _database_connection_response(error: Exception) -> Response:
     response.status_code = 503
     response.headers["Retry-After"] = str(DB_RETRY_AFTER_SECONDS)
     return response
+
+
+def _normalize_timestamp(value: datetime | None) -> datetime | None:
+    if value is None:
+        return None
+    if value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc)
+
+
+def _timestamp_to_iso(value: datetime | None) -> str | None:
+    normalized = _normalize_timestamp(value)
+    if normalized is None:
+        return None
+    return normalized.isoformat()
 
 
 @api_bp.errorhandler(DatabaseConnectionError)
@@ -3890,6 +3906,240 @@ def api_channels():
     except Exception as e:
         logger.error(f"Error in API channels: {e}")
         return jsonify({"error": str(e), "channels": []}), 500
+
+
+@api_bp.route("/blocklist", methods=["GET"])
+def api_blocklist():
+    """Get the current blocklist with window state information."""
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor(cursor_factory=RealDictCursor)
+        cursor.execute(
+            """
+            SELECT bn.node_id,
+                   bn.blocked_since,
+                   bn.blocked_until,
+                   bn.reason,
+                   bn.last_reviewed_at,
+                   bn.auto_blocked,
+                   ni.long_name,
+                   ni.short_name
+            FROM blocked_nodes bn
+            LEFT JOIN node_info ni ON bn.node_id = ni.node_id
+            ORDER BY bn.blocked_until DESC
+            """
+        )
+        rows = cursor.fetchall()
+        now = datetime.now(timezone.utc)
+        blocked_nodes = []
+        for row in rows:
+            blocked_until = _normalize_timestamp(row.get("blocked_until"))
+            blocked_since = _normalize_timestamp(row.get("blocked_since"))
+            window_end = _normalize_timestamp(row.get("last_reviewed_at"))
+            is_blocked = bool(blocked_until and blocked_until > now)
+            window_active = bool(window_end and window_end > now and not is_blocked)
+            node_name = row.get("long_name") or row.get("short_name")
+            blocked_nodes.append(
+                {
+                    "node_id": row.get("node_id"),
+                    "node_name": node_name,
+                    "blocked_since": _timestamp_to_iso(blocked_since),
+                    "blocked_until": _timestamp_to_iso(blocked_until),
+                    "reason": row.get("reason"),
+                    "last_reviewed_at": _timestamp_to_iso(window_end),
+                    "auto_blocked": row.get("auto_blocked", False),
+                    "is_blocked": is_blocked,
+                    "window_active": window_active,
+                }
+            )
+        return safe_jsonify({"blocked_nodes": blocked_nodes})
+    except Exception as e:
+        logger.error(f"Error in API blocklist: {e}")
+        return jsonify({"error": str(e), "blocked_nodes": []}), 500
+    finally:
+        if "cursor" in locals():
+            try:
+                cursor.close()
+            except Exception:
+                pass
+        if "conn" in locals():
+            put_db_connection(conn)
+
+
+@api_bp.route("/blocklist/block", methods=["POST"])
+def api_blocklist_block():
+    """Block a node for a specified duration."""
+    payload = request.get_json(silent=True) or {}
+    node_id = payload.get("node_id")
+    if node_id is None:
+        return jsonify({"error": "node_id is required"}), 400
+    try:
+        node_id_int = int(node_id)
+    except (TypeError, ValueError):
+        return jsonify({"error": "node_id must be an integer"}), 400
+
+    duration_hours = payload.get("duration_hours", 168)
+    try:
+        duration_hours = float(duration_hours)
+    except (TypeError, ValueError):
+        duration_hours = 168
+    if duration_hours <= 0:
+        duration_hours = 168
+
+    reason = payload.get("reason")
+    auto_blocked = bool(payload.get("auto_blocked", False))
+    now = datetime.now(timezone.utc)
+    blocked_until = now + timedelta(hours=duration_hours)
+
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor(cursor_factory=RealDictCursor)
+        cursor.execute(
+            """
+            INSERT INTO blocked_nodes (
+                node_id,
+                blocked_since,
+                blocked_until,
+                reason,
+                last_reviewed_at,
+                auto_blocked
+            )
+            VALUES (%s, %s, %s, %s, NULL, %s)
+            ON CONFLICT (node_id) DO UPDATE
+            SET blocked_since = EXCLUDED.blocked_since,
+                blocked_until = EXCLUDED.blocked_until,
+                reason = EXCLUDED.reason,
+                last_reviewed_at = NULL,
+                auto_blocked = EXCLUDED.auto_blocked
+            """,
+            (node_id_int, now, blocked_until, reason, auto_blocked),
+        )
+        conn.commit()
+        return safe_jsonify(
+            {
+                "node_id": node_id_int,
+                "blocked_until": _timestamp_to_iso(blocked_until),
+                "reason": reason,
+                "auto_blocked": auto_blocked,
+            }
+        )
+    except Exception as e:
+        logger.error(f"Error blocking node: {e}")
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if "cursor" in locals():
+            try:
+                cursor.close()
+            except Exception:
+                pass
+        if "conn" in locals():
+            put_db_connection(conn)
+
+
+@api_bp.route("/blocklist/unblock", methods=["POST"])
+def api_blocklist_unblock():
+    """Unblock a node immediately."""
+    payload = request.get_json(silent=True) or {}
+    node_id = payload.get("node_id")
+    if node_id is None:
+        return jsonify({"error": "node_id is required"}), 400
+    try:
+        node_id_int = int(node_id)
+    except (TypeError, ValueError):
+        return jsonify({"error": "node_id must be an integer"}), 400
+
+    reason = payload.get("reason")
+    now = datetime.now(timezone.utc)
+
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor(cursor_factory=RealDictCursor)
+        cursor.execute(
+            """
+            UPDATE blocked_nodes
+            SET blocked_until = %s,
+                last_reviewed_at = NULL,
+                auto_blocked = FALSE,
+                reason = COALESCE(%s, reason)
+            WHERE node_id = %s
+            """,
+            (now, reason, node_id_int),
+        )
+        conn.commit()
+        if cursor.rowcount == 0:
+            return jsonify({"error": "node_id not found"}), 404
+        return safe_jsonify({"node_id": node_id_int, "blocked_until": _timestamp_to_iso(now)})
+    except Exception as e:
+        logger.error(f"Error unblocking node: {e}")
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if "cursor" in locals():
+            try:
+                cursor.close()
+            except Exception:
+                pass
+        if "conn" in locals():
+            put_db_connection(conn)
+
+
+@api_bp.route("/blocklist/reactivate", methods=["POST"])
+def api_blocklist_reactivate():
+    """Open a reactivation window for a node."""
+    payload = request.get_json(silent=True) or {}
+    node_id = payload.get("node_id")
+    if node_id is None:
+        return jsonify({"error": "node_id is required"}), 400
+    try:
+        node_id_int = int(node_id)
+    except (TypeError, ValueError):
+        return jsonify({"error": "node_id must be an integer"}), 400
+
+    window_hours = payload.get("window_hours", 1)
+    try:
+        window_hours = float(window_hours)
+    except (TypeError, ValueError):
+        window_hours = 1
+    if window_hours <= 0:
+        window_hours = 1
+
+    reason = payload.get("reason")
+    now = datetime.now(timezone.utc)
+    window_end = now + timedelta(hours=window_hours)
+
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor(cursor_factory=RealDictCursor)
+        cursor.execute(
+            """
+            UPDATE blocked_nodes
+            SET blocked_until = %s,
+                last_reviewed_at = %s,
+                reason = COALESCE(%s, reason)
+            WHERE node_id = %s
+            """,
+            (now, window_end, reason, node_id_int),
+        )
+        conn.commit()
+        if cursor.rowcount == 0:
+            return jsonify({"error": "node_id not found"}), 404
+        return safe_jsonify(
+            {
+                "node_id": node_id_int,
+                "blocked_until": _timestamp_to_iso(now),
+                "window_end": _timestamp_to_iso(window_end),
+            }
+        )
+    except Exception as e:
+        logger.error(f"Error opening reactivation window: {e}")
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if "cursor" in locals():
+            try:
+                cursor.close()
+            except Exception:
+                pass
+        if "conn" in locals():
+            put_db_connection(conn)
 
 
 def safe_jsonify(data, *args, **kwargs):

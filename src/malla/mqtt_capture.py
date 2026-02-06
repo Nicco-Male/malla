@@ -37,6 +37,7 @@ import os
 import socket
 import threading
 import time
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 import paho.mqtt.client as mqtt
@@ -113,6 +114,15 @@ DECRYPTION_KEYS: list[str] = _cfg.get_decryption_keys()
 
 # Ignored node IDs - packets from these nodes will be dropped
 IGNORED_NODE_IDS: set[int] = _cfg.get_ignored_node_ids()
+
+# Blocklist runtime settings
+BLOCKLIST_CACHE_TTL_SECONDS = 30
+BLOCKLIST_REVIEW_INTERVAL_SECONDS = 300
+BLOCKLIST_REVIEW_PERIOD_SECONDS = 7 * 24 * 3600
+BLOCKLIST_REVIEW_WINDOW_SECONDS = 3600
+BLOCKLIST_AUTO_BLOCK_DURATION_SECONDS = 7 * 24 * 3600
+SPAM_PACKET_WINDOW_SECONDS = 3600
+SPAM_PACKET_THRESHOLD = 500
 
 # Whether to silently drop malformed packets
 IGNORE_MALFORMED_PACKETS: bool = _cfg.ignore_malformed_packets
@@ -207,6 +217,8 @@ node_cache = LRUNodeCache(max_size=NODE_CACHE_MAX_SIZE)
 
 cleanup_thread: threading.Thread | None = None  # Background thread for data cleanup
 stop_cleanup = threading.Event()  # Event to signal cleanup thread to stop
+blocklist_scheduler_thread: threading.Thread | None = None
+stop_blocklist_scheduler = threading.Event()
 ingest_stats_lock = threading.Lock()
 ingest_stats = {
     "received": 0,
@@ -295,6 +307,171 @@ except ValueError as e:
     _metrics_registered = True
 
 TRACER = trace.get_tracer(__name__)
+
+_blocklist_cache_lock = threading.Lock()
+_blocklist_cache: dict[str, Any] = {
+    "fetched_at": 0.0,
+    "nodes": {},
+}
+
+
+def _normalize_db_timestamp(value: datetime | None) -> datetime | None:
+    if value is None:
+        return None
+    if value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc)
+
+
+def _refresh_blocklist_cache(force: bool = False) -> None:
+    now = time.time()
+    with _blocklist_cache_lock:
+        if not force and now - _blocklist_cache["fetched_at"] < BLOCKLIST_CACHE_TTL_SECONDS:
+            return
+
+    conn = None
+    cursor = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor(cursor_factory=RealDictCursor)
+        cursor.execute(
+            """
+            SELECT node_id, blocked_until
+            FROM blocked_nodes
+            WHERE blocked_until > NOW()
+            """
+        )
+        rows = cursor.fetchall()
+        active_nodes: dict[int, datetime] = {}
+        for row in rows:
+            blocked_until = _normalize_db_timestamp(row.get("blocked_until"))
+            node_id = row.get("node_id")
+            if node_id is None or blocked_until is None:
+                continue
+            active_nodes[int(node_id)] = blocked_until
+        with _blocklist_cache_lock:
+            _blocklist_cache["nodes"] = active_nodes
+            _blocklist_cache["fetched_at"] = now
+    except Exception as exc:  # noqa: BLE001
+        logging.warning("Failed to refresh blocklist cache: %s", exc)
+    finally:
+        if cursor:
+            try:
+                cursor.close()
+            except Exception:
+                pass
+        if conn:
+            put_db_connection(conn)
+
+
+def _get_blocked_until(node_id: int) -> datetime | None:
+    _refresh_blocklist_cache()
+    with _blocklist_cache_lock:
+        return _blocklist_cache["nodes"].get(node_id)
+
+
+def _invalidate_blocklist_cache() -> None:
+    with _blocklist_cache_lock:
+        _blocklist_cache["fetched_at"] = 0.0
+
+
+def _node_spam_still_active(cursor: Any, node_id: int) -> bool:
+    cursor.execute(
+        """
+        SELECT COUNT(*) AS total
+        FROM packet_history
+        WHERE from_node_id = %s
+          AND timestamp >= NOW() - (%s * INTERVAL '1 second')
+        """,
+        (node_id, SPAM_PACKET_WINDOW_SECONDS),
+    )
+    result = cursor.fetchone()
+    total = 0
+    if result:
+        total = int(result.get("total") or 0)
+    return total >= SPAM_PACKET_THRESHOLD
+
+
+def _run_blocklist_review() -> None:
+    conn = None
+    cursor = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor(cursor_factory=RealDictCursor)
+        cursor.execute(
+            """
+            UPDATE blocked_nodes
+            SET blocked_until = NOW(),
+                last_reviewed_at = NOW() + (%s * INTERVAL '1 second')
+            WHERE auto_blocked = TRUE
+              AND blocked_until > NOW()
+              AND (blocked_since <= NOW() - (%s * INTERVAL '1 second') OR blocked_since IS NULL)
+              AND (last_reviewed_at IS NULL OR last_reviewed_at <= NOW())
+            """,
+            (BLOCKLIST_REVIEW_WINDOW_SECONDS, BLOCKLIST_REVIEW_PERIOD_SECONDS),
+        )
+        conn.commit()
+
+        cursor.execute(
+            """
+            SELECT node_id
+            FROM blocked_nodes
+            WHERE auto_blocked = TRUE
+              AND blocked_until <= NOW()
+              AND last_reviewed_at IS NOT NULL
+              AND last_reviewed_at <= NOW()
+            """
+        )
+        nodes_to_review = cursor.fetchall()
+
+        for row in nodes_to_review:
+            node_id = row.get("node_id")
+            if node_id is None:
+                continue
+            node_id_int = int(node_id)
+            if _node_spam_still_active(cursor, node_id_int):
+                cursor.execute(
+                    """
+                    UPDATE blocked_nodes
+                    SET blocked_since = NOW(),
+                        blocked_until = NOW() + (%s * INTERVAL '1 second'),
+                        last_reviewed_at = NULL
+                    WHERE node_id = %s
+                    """,
+                    (BLOCKLIST_AUTO_BLOCK_DURATION_SECONDS, node_id_int),
+                )
+            else:
+                cursor.execute(
+                    """
+                    UPDATE blocked_nodes
+                    SET last_reviewed_at = NULL,
+                        auto_blocked = FALSE
+                    WHERE node_id = %s
+                    """,
+                    (node_id_int,),
+                )
+        conn.commit()
+        _invalidate_blocklist_cache()
+    except Exception as exc:  # noqa: BLE001
+        logging.warning("Blocklist review failed: %s", exc)
+        if conn:
+            conn.rollback()
+    finally:
+        if cursor:
+            try:
+                cursor.close()
+            except Exception:
+                pass
+        if conn:
+            put_db_connection(conn)
+
+
+def blocklist_scheduler_worker() -> None:
+    logging.info("Blocklist scheduler worker started")
+    while not stop_blocklist_scheduler.is_set():
+        _run_blocklist_review()
+        stop_blocklist_scheduler.wait(BLOCKLIST_REVIEW_INTERVAL_SECONDS)
+    logging.info("Blocklist scheduler worker stopped")
 
 
 # --- Decryption Functions ---
@@ -1168,6 +1345,21 @@ def on_message(client: mqtt.Client, userdata: Any, msg: mqtt.MQTTMessage) -> Non
                 span.set_attribute("malla.packet.ignored_node_id", from_node_id_numeric)
             return  # Drop packet, don't save to database
 
+        blocked_until = None
+        if from_node_id_numeric:
+            blocked_until = _get_blocked_until(int(from_node_id_numeric))
+        if blocked_until and blocked_until > datetime.now(timezone.utc):
+            logging.debug(
+                "Ignoring packet from node %s (blocked until %s)",
+                from_node_id_numeric,
+                blocked_until.isoformat(),
+            )
+            PACKETS_IGNORED.inc()
+            if span is not None:
+                span.set_attribute("malla.packet.blocked", True)
+                span.set_attribute("malla.packet.blocked_node_id", from_node_id_numeric)
+            return
+
         to_node_id_numeric = mesh_packet.to
 
         # Try to decrypt the packet if it appears to be encrypted
@@ -1793,6 +1985,19 @@ def main() -> None:
     else:
         logging.info("Data retention disabled; cleanup worker not started.")
 
+    global blocklist_scheduler_thread
+    stop_blocklist_scheduler.clear()
+    blocklist_scheduler_thread = threading.Thread(
+        target=blocklist_scheduler_worker,
+        daemon=True,
+        name="BlocklistScheduler",
+    )
+    blocklist_scheduler_thread.start()
+    logging.info(
+        "Blocklist scheduler thread started (review interval=%ss)",
+        BLOCKLIST_REVIEW_INTERVAL_SECONDS,
+    )
+
     try:
         # Keep the main thread alive
         while True:
@@ -1822,6 +2027,7 @@ def main() -> None:
     finally:
         # Signal cleanup thread to stop
         stop_cleanup.set()
+        stop_blocklist_scheduler.set()
 
         # Wait for cleanup thread to finish (with timeout)
         if cleanup_thread and cleanup_thread.is_alive():
@@ -1829,6 +2035,11 @@ def main() -> None:
             cleanup_thread.join(timeout=5)
             if cleanup_thread.is_alive():
                 logging.warning("Cleanup thread did not finish gracefully")
+        if blocklist_scheduler_thread and blocklist_scheduler_thread.is_alive():
+            logging.info("Waiting for blocklist scheduler thread to finish...")
+            blocklist_scheduler_thread.join(timeout=5)
+            if blocklist_scheduler_thread.is_alive():
+                logging.warning("Blocklist scheduler thread did not finish gracefully")
 
         logging.info("Stopping MQTT client loop...")
         mqtt_client.loop_stop()

@@ -262,6 +262,7 @@ def _ensure_schema_migrations(cursor: Any) -> None:
         "packet_indexes": _migration_packet_indexes,
         "cached_longest_links": _migration_cached_longest_links,
         "node_telemetry_latest": _migration_node_telemetry_latest,
+        "blocked_nodes": _migration_blocked_nodes,
     }
 
     for name, func in migrations.items():
@@ -441,5 +442,27 @@ def _migration_node_telemetry_latest(cursor: Any) -> None:
         """
         CREATE INDEX IF NOT EXISTS idx_node_telemetry_latest_updated
         ON node_telemetry_latest(last_updated DESC)
+        """
+    )
+
+
+def _migration_blocked_nodes(cursor: Any) -> None:
+    """Ensure blocked_nodes table exists for runtime blocklist management."""
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS blocked_nodes (
+            node_id BIGINT PRIMARY KEY,
+            blocked_since TIMESTAMP NOT NULL DEFAULT NOW(),
+            blocked_until TIMESTAMP NOT NULL,
+            reason TEXT,
+            last_reviewed_at TIMESTAMP,
+            auto_blocked BOOLEAN NOT NULL DEFAULT FALSE
+        )
+        """
+    )
+    cursor.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_blocked_nodes_blocked_until
+        ON blocked_nodes(blocked_until)
         """
     )

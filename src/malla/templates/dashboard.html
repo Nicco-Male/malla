@@ -225,6 +225,36 @@
     </div>
 </div>
 
+<!-- Wall of Block Row -->
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card h-100">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="card-title mb-0"><i class="bi bi-shield-lock"></i> Wall of Block</h5>
+                <small class="text-muted">Blocked nodes and reactivation windows</small>
+            </div>
+            <div class="card-body">
+                <div id="blocklistLoading" class="text-muted small mb-2">Loading blocklist...</div>
+                <div class="table-responsive">
+                    <table class="table table-sm table-hover align-middle mb-0" id="blocklistTable">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Node</th>
+                                <th>Status</th>
+                                <th>Blocked Until</th>
+                                <th>Window Ends</th>
+                                <th>Reason</th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+                <div id="blocklistEmpty" class="text-muted small d-none">No blocked nodes.</div>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- Signal Quality and Activity Charts Row -->
 <div class="row mb-4">
     <!-- Active Nodes Distribution -->
@@ -563,6 +593,7 @@
     document.addEventListener('DOMContentLoaded', function () {
         // Load analytics data asynchronously
         loadAnalyticsData();
+        loadBlocklist();
 
         // Setup auto-refresh controls
         const autoRefreshToggle = document.getElementById('autoRefreshToggle');
@@ -590,6 +621,7 @@
             }
             autoRefreshTimer = setInterval(() => {
                 loadAnalyticsData();
+                loadBlocklist();
             }, intervalSeconds * 1000);
         }
 
@@ -599,6 +631,7 @@
                 if (autoRefreshToggle.checked) {
                     // Refresh immediately when enabling auto-refresh
                     loadAnalyticsData();
+                    loadBlocklist();
                 }
             });
         }
@@ -618,6 +651,7 @@
                     analyticsHours = 24;
                 }
                 loadAnalyticsData();
+                loadBlocklist();
             });
         }
 
@@ -691,6 +725,73 @@
             // Hide loading spinners and show error message
             hideAllLoadingSpinners();
             showErrorMessage('Failed to load chart data. Please refresh the page.');
+        }
+    }
+
+    function formatDateTime(value) {
+        if (!value) return '-';
+        const date = new Date(value);
+        if (Number.isNaN(date.getTime())) {
+            return value;
+        }
+        return date.toLocaleString();
+    }
+
+    async function loadBlocklist() {
+        const loading = document.getElementById('blocklistLoading');
+        const emptyState = document.getElementById('blocklistEmpty');
+        const table = document.getElementById('blocklistTable');
+        const tbody = table ? table.querySelector('tbody') : null;
+        if (!tbody) {
+            return;
+        }
+        if (loading) {
+            loading.classList.remove('d-none');
+        }
+        try {
+            const response = await fetch(new URL('/api/blocklist', window.location.origin));
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            const data = await response.json();
+            const nodes = (data && data.blocked_nodes) ? data.blocked_nodes : [];
+            tbody.innerHTML = '';
+            if (!nodes.length) {
+                if (emptyState) {
+                    emptyState.classList.remove('d-none');
+                }
+            } else if (emptyState) {
+                emptyState.classList.add('d-none');
+            }
+
+            nodes.forEach(node => {
+                const row = document.createElement('tr');
+                const nodeLabel = node.node_name ? `${node.node_name} (#${node.node_id})` : `Node ${node.node_id}`;
+                let statusLabel = '<span class="badge bg-success">Active</span>';
+                if (node.is_blocked) {
+                    statusLabel = '<span class="badge bg-danger">Blocked</span>';
+                } else if (node.window_active) {
+                    statusLabel = '<span class="badge bg-warning text-dark">Reactivation Window</span>';
+                }
+                row.innerHTML = `
+                    <td>${nodeLabel}</td>
+                    <td>${statusLabel}</td>
+                    <td>${formatDateTime(node.blocked_until)}</td>
+                    <td>${formatDateTime(node.last_reviewed_at)}</td>
+                    <td>${node.reason || '-'}</td>
+                `;
+                tbody.appendChild(row);
+            });
+        } catch (error) {
+            console.error('Error loading blocklist:', error);
+            if (emptyState) {
+                emptyState.classList.remove('d-none');
+                emptyState.textContent = 'Unable to load blocklist.';
+            }
+        } finally {
+            if (loading) {
+                loading.classList.add('d-none');
+            }
         }
     }
 
