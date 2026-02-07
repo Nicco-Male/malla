@@ -123,15 +123,7 @@ grouping_section, table_stats_section, table_layout_styles %}
 <script src="{{ url_for('static', filename='js/time-range-presets.js') }}"></script>
 <script>
     document.addEventListener('DOMContentLoaded', function () {
-        // Move sidebar content into the actual sidebar FIRST
-        const sidebarContent = document.getElementById('sidebarContent');
-        const sidebarContainer = document.querySelector('.sidebar-content');
-        if (sidebarContent && sidebarContainer) {
-            sidebarContainer.innerHTML = sidebarContent.innerHTML;
-            sidebarContent.remove();
-        }
-
-        // Initialize time presets after sidebar content is moved so event handlers stay attached
+        // Initialize time presets
         new TimeRangePresets({
             containerSelector: '#time-presets',
             startTimeSelector: '#start_time',
@@ -144,6 +136,14 @@ grouping_section, table_stats_section, table_layout_styles %}
                 }
             }
         });
+
+        // Move sidebar content into the actual sidebar FIRST
+        const sidebarContent = document.getElementById('sidebarContent');
+        const sidebarContainer = document.querySelector('.sidebar-content');
+        if (sidebarContent && sidebarContainer) {
+            sidebarContainer.innerHTML = sidebarContent.innerHTML;
+            sidebarContent.remove();
+        }
 
         // Initialize URL filter manager AFTER sidebar content is moved
         const urlManager = new URLFilterManager();
