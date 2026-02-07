@@ -459,6 +459,120 @@ def get_top_channel_utilizers():
         return jsonify({"error": str(e)}), 500
 
 
+@api_bp.route("/stats/noisy-nodes")
+def get_noisy_nodes():
+    """Get nodes sending identical packets at regular intervals (potentially noisy)."""
+    try:
+        gateway_id = request.args.get("gateway_id")
+        hours = request.args.get("hours", 24, type=int)
+        min_packets = request.args.get("min_packets", 12, type=int)
+        max_interval_cv = request.args.get("max_interval_cv", 0.25, type=float)
+        max_interval_seconds = request.args.get("max_interval_seconds", 3600, type=int)
+
+        since = time.time() - (hours * 3600)
+
+        conn = None
+        cursor = None
+        try:
+            conn = get_db_connection()
+            conn.autocommit = True
+            cursor = conn.cursor(cursor_factory=RealDictCursor)
+
+            where_conditions = ["ph.timestamp >= %s", "ph.from_node_id IS NOT NULL"]
+            params: list[Any] = [since]
+
+            if gateway_id:
+                where_conditions.append("ph.gateway_id = %s")
+                params.append(gateway_id)
+
+            where_clause = " AND ".join(where_conditions)
+
+            params.extend([min_packets, max_interval_seconds, max_interval_cv])
+
+            cursor.execute(
+                f"""
+                WITH filtered AS (
+                    SELECT
+                        ph.from_node_id,
+                        ph.portnum_name,
+                        ph.payload_length,
+                        md5(COALESCE(ph.raw_payload, ''::bytea)) AS payload_hash,
+                        ph.timestamp
+                    FROM packet_history ph
+                    WHERE {where_clause}
+                ),
+                deltas AS (
+                    SELECT
+                        f.from_node_id,
+                        f.portnum_name,
+                        f.payload_length,
+                        f.payload_hash,
+                        f.timestamp,
+                        f.timestamp
+                            - LAG(f.timestamp) OVER (
+                                PARTITION BY f.from_node_id,
+                                             f.portnum_name,
+                                             f.payload_length,
+                                             f.payload_hash
+                                ORDER BY f.timestamp
+                            ) AS interval_sec
+                    FROM filtered f
+                )
+                SELECT
+                    d.from_node_id AS node_id,
+                    MAX(ni.long_name) AS long_name,
+                    MAX(ni.short_name) AS short_name,
+                    MAX(ni.hw_model) AS hw_model,
+                    d.portnum_name,
+                    d.payload_length,
+                    d.payload_hash,
+                    COUNT(*) AS packet_count,
+                    COUNT(*) FILTER (WHERE d.interval_sec IS NOT NULL) AS interval_samples,
+                    AVG(d.interval_sec) AS avg_interval_sec,
+                    STDDEV_POP(d.interval_sec) AS interval_stddev_sec,
+                    MAX(d.timestamp) AS last_seen
+                FROM deltas d
+                LEFT JOIN node_info ni ON d.from_node_id = ni.node_id
+                GROUP BY
+                    d.from_node_id,
+                    d.portnum_name,
+                    d.payload_length,
+                    d.payload_hash
+                HAVING COUNT(*) >= %s
+                   AND AVG(d.interval_sec) IS NOT NULL
+                   AND AVG(d.interval_sec) <= %s
+                   AND (
+                        STDDEV_POP(d.interval_sec) IS NULL
+                        OR STDDEV_POP(d.interval_sec)
+                            <= AVG(d.interval_sec) * %s
+                   )
+                ORDER BY
+                    (COUNT(*) / NULLIF(AVG(d.interval_sec), 0)) DESC,
+                    COUNT(*) DESC
+                LIMIT 25
+                """,
+                params,
+            )
+
+            nodes = [dict(row) for row in cursor.fetchall() or []]
+        finally:
+            if cursor:
+                cursor.close()
+            if conn:
+                try:
+                    put_db_connection(conn)
+                except Exception:
+                    try:
+                        conn.close()
+                    except Exception:
+                        pass
+
+        return safe_jsonify(nodes)
+    except Exception as e:
+        logger.error(f"Error getting noisy nodes: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
 @api_bp.route("/stats/channels")
 def get_channel_stats():
     """Get channel activity statistics."""

@@ -427,6 +427,40 @@
     </div>
 </div>
 
+<!-- Noisy Nodes -->
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card shadow-sm h-100 glass-panel">
+            <div class="card-header bg-transparent border-0">
+                <h5 class="mb-0 card-title"><i class="bi bi-broadcast-pin me-2"></i>Noisy Nodes</h5>
+                <small class="text-muted">Nodes sending identical packets at regular intervals (possible misconfiguration or boot loop)</small>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0" id="noisyNodesTable">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Node</th>
+                                <th>Packet Signature</th>
+                                <th class="text-center">Packets</th>
+                                <th class="text-center">Avg Interval</th>
+                                <th class="text-end">Regularity</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td colspan="5" class="text-center py-4">
+                                    <div class="spinner-border text-primary" role="status"></div>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- Unique Statistics Section - Not on Dashboard -->
 <div class="row mb-4" id="advancedNetworkAnalytics">
     <div class="col-12">
@@ -551,13 +585,14 @@
                     fetch(`/api/stats/telemetry/humidity${hoursParam}`),
                     fetch(`/api/stats/telemetry/voltage${hoursParam}`),
                     fetch(`/api/stats/top-channel-utilizers${hoursParam}`),
+                    fetch(`/api/stats/noisy-nodes${hoursParam}`),
                     fetch(`/gateway/api/gateways/status${hoursParam}`),
                     fetch(`/api/stats/hop-distribution${hoursParam}`),
                     fetch(`/api/stats/hardware-models${hoursParam}`),
                     fetch(`/api/stats/peak-hours${hoursParam}`)
                 ]);
 
-                const names = ['hottest', 'coldest', 'utilization', 'packet types', 'channels', 'network health', 'node naming', 'highlighted nodes', 'gateways', 'signal quality', 'signal quality nodes', 'delivery', 'battery', 'humidity', 'voltage', 'top channel utilizers', 'gateway status', 'hop distribution', 'hardware models', 'peak hours'];
+                const names = ['hottest', 'coldest', 'utilization', 'packet types', 'channels', 'network health', 'node naming', 'highlighted nodes', 'gateways', 'signal quality', 'signal quality nodes', 'delivery', 'battery', 'humidity', 'voltage', 'top channel utilizers', 'noisy nodes', 'gateway status', 'hop distribution', 'hardware models', 'peak hours'];
                 const [
                     hottestData,
                     coldestData,
@@ -575,6 +610,7 @@
                     humidityData,
                     voltageData,
                     topChannelUtilizersData,
+                    noisyNodesData,
                     gatewayStatusData,
                     hopDistributionData,
                     hardwareModelsData,
@@ -680,6 +716,14 @@
                     renderTopChannelUtilizersTable('topChannelUtilizersTable', []);
                 }
 
+                if (Array.isArray(noisyNodesData)) {
+                    renderNoisyNodesTable('noisyNodesTable', noisyNodesData);
+                } else if (noisyNodesData && noisyNodesData.error) {
+                    showError('noisyNodesTable', noisyNodesData.error);
+                } else {
+                    renderNoisyNodesTable('noisyNodesTable', []);
+                }
+
                 if (gatewayStatusData && gatewayStatusData.error) {
                     showError('gatewayStatusTable', gatewayStatusData.error);
                 } else {
@@ -744,6 +788,7 @@
                     'humidityChart',
                     'voltageChart',
                     'topChannelUtilizersTable',
+                    'noisyNodesTable',
                     'gatewayStatusTable',
                     'hopDistributionChart',
                     'hardwareModelsChart',
@@ -1676,6 +1721,90 @@
                 </td>
                 <td class="text-end">
                     ${packetCount.toLocaleString()}
+                </td>
+            `;
+
+                tbody.appendChild(tr);
+            });
+        }
+
+        function formatInterval(seconds) {
+            if (!seconds || seconds <= 0) {
+                return 'N/A';
+            }
+            if (seconds < 60) {
+                return `${seconds.toFixed(1)}s`;
+            }
+            if (seconds < 3600) {
+                return `${(seconds / 60).toFixed(1)}m`;
+            }
+            return `${(seconds / 3600).toFixed(1)}h`;
+        }
+
+        function renderNoisyNodesTable(tableId, nodes) {
+            const table = document.getElementById(tableId);
+            if (!table) return;
+            const tbody = table.querySelector('tbody');
+            if (!tbody) return;
+
+            tbody.innerHTML = '';
+
+            if (!nodes || nodes.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="5" class="text-center py-4 text-muted">No noisy nodes detected</td></tr>';
+                return;
+            }
+
+            nodes.forEach(node => {
+                const tr = document.createElement('tr');
+                const displayName = node.display_name || node.long_name || node.short_name || `Node ${node.node_id || 'Unknown'}`;
+                const initials = displayName.substring(0, 2).toUpperCase();
+                const nodeId = node.node_id || '';
+                const portnum = node.portnum_name || 'Unknown';
+                const payloadLength = node.payload_length || 0;
+                const payloadHash = node.payload_hash ? node.payload_hash.substring(0, 8) : 'n/a';
+                const packetCount = node.packet_count || 0;
+                const avgInterval = node.avg_interval_sec;
+                const stddev = node.interval_stddev_sec;
+                const regularity = avgInterval
+                    ? (stddev !== null && stddev !== undefined
+                        ? `${Math.min((stddev / avgInterval) * 100, 999).toFixed(0)}% jitter`
+                        : 'steady')
+                    : 'N/A';
+
+                tr.innerHTML = `
+                <td>
+                    <div class="d-flex align-items-center">
+                        <div class="node-avatar me-2" style="background-color: ${stringToColor(String(nodeId))}">
+                            ${initials}
+                        </div>
+                        <div>
+                            <div class="fw-bold text-truncate" style="max-width: 200px;">
+                                <a href="/node/${nodeId}" class="text-decoration-none text-body">
+                                    ${displayName}
+                                </a>
+                            </div>
+                            <div class="small text-muted">${node.hw_model || 'Unknown Node'}</div>
+                        </div>
+                    </div>
+                </td>
+                <td>
+                    <div class="fw-semibold text-truncate" style="max-width: 260px;">
+                        ${portnum}
+                    </div>
+                    <div class="small text-muted">
+                        ${payloadLength} bytes · ${payloadHash}
+                    </div>
+                </td>
+                <td class="text-center">
+                    <span class="badge bg-warning text-dark border">
+                        ${packetCount.toLocaleString()}
+                    </span>
+                </td>
+                <td class="text-center text-muted">
+                    ${formatInterval(avgInterval)}
+                </td>
+                <td class="text-end text-muted small">
+                    ${regularity}
                 </td>
             `;
 
