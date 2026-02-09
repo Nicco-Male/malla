@@ -927,6 +927,10 @@ def cleanup_old_data() -> None:
             # Delete node_info records for nodes that haven't been seen recently
             # and have no packets in the packet_history table
             while True:
+                # Lock order (packet_history -> node_info) avoids deadlocks with
+                # get_available_from_nodes() in src/malla/database/repositories.py.
+                cursor.execute("LOCK TABLE packet_history IN SHARE MODE")
+                cursor.execute("LOCK TABLE node_info IN SHARE MODE")
                 cursor.execute(
                     """
                     SELECT DISTINCT node_id
