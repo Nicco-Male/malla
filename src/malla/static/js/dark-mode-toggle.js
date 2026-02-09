@@ -29,7 +29,7 @@ class DarkModeToggle {
         if (saved && ['light', 'dark', 'auto'].includes(saved)) {
             return saved;
         }
-        return 'auto'; // Default to auto (system preference)
+        return 'dark'; // Default to dark mode
     }
 
     /**
@@ -231,4 +231,3 @@ document.addEventListener('DOMContentLoaded', function() {
 if (typeof module !== 'undefined' && module.exports) {
     module.exports = DarkModeToggle;
 }
-
