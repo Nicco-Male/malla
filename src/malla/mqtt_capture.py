@@ -929,19 +929,30 @@ def cleanup_old_data() -> None:
             while True:
                 cursor.execute(
                     """
+                    SELECT DISTINCT node_id
+                    FROM (
+                        SELECT from_node_id AS node_id
+                        FROM packet_history
+                        WHERE from_node_id IS NOT NULL
+                        UNION
+                        SELECT to_node_id AS node_id
+                        FROM packet_history
+                        WHERE to_node_id IS NOT NULL
+                    ) AS packet_nodes
+                    """
+                )
+                packet_node_ids = [row["node_id"] for row in cursor.fetchall()]
+                cursor.execute(
+                    """
                     DELETE FROM node_info
                     WHERE ctid IN (
                         SELECT ctid FROM node_info
                         WHERE last_updated < %s
-                        AND node_id NOT IN (
-                            SELECT DISTINCT from_node_id FROM packet_history WHERE from_node_id IS NOT NULL
-                            UNION
-                            SELECT DISTINCT to_node_id FROM packet_history WHERE to_node_id IS NOT NULL
-                        )
+                        AND NOT (node_id = ANY(%s))
                         LIMIT 1000
                     )
                     """,
-                    (cutoff_time,),
+                    (cutoff_time, packet_node_ids),
                 )
                 batch_nodes_deleted = cursor.rowcount
                 nodes_deleted += batch_nodes_deleted
