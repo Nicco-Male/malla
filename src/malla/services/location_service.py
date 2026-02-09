@@ -11,7 +11,9 @@ from functools import lru_cache
 
 from psycopg2.extras import RealDictCursor
 
+from ..config import get_config
 from ..database.repositories import LocationRepository
+from ..utils.node_utils import get_bulk_node_names, get_bulk_node_short_names
 
 logger = logging.getLogger(__name__)
 
@@ -21,6 +23,182 @@ _geocoding_cache: dict[tuple[float, float], tuple[str | None, float]] = {}
 
 class LocationService:
     """Service for location-related operations and calculations."""
+
+    @staticmethod
+    def _rssi_to_distance_meters(rssi_dbm: float | None) -> float | None:
+        """Convert RSSI (dBm) to distance using a log-distance path loss model."""
+        if rssi_dbm is None:
+            return None
+
+        cfg = get_config()
+        reference_distance = max(0.1, cfg.rssi_reference_distance_m)
+        path_loss_exponent = cfg.rssi_path_loss_exponent
+        if path_loss_exponent <= 0:
+            return None
+
+        # Clamp RSSI to avoid negative/zero exponent overflow for extremely strong signals.
+        rssi_dbm = min(rssi_dbm, cfg.rssi_reference_dbm)
+        path_loss_db = cfg.rssi_reference_dbm - rssi_dbm
+        distance = reference_distance * 10 ** (path_loss_db / (10 * path_loss_exponent))
+        return max(reference_distance, distance)
+
+    @staticmethod
+    def _solve_multilateration(measurements: list[dict[str, float]]) -> dict[str, float] | None:
+        """Estimate position from anchor measurements using weighted least squares."""
+        if len(measurements) < 3:
+            return None
+
+        lat0 = sum(m["lat"] for m in measurements) / len(measurements)
+        lon0 = sum(m["lon"] for m in measurements) / len(measurements)
+        lat0_rad = math.radians(lat0)
+        lon0_rad = math.radians(lon0)
+        earth_radius = 6371000.0
+
+        def to_xy(lat: float, lon: float) -> tuple[float, float]:
+            return (
+                earth_radius * math.radians(lon - lon0) * math.cos(lat0_rad),
+                earth_radius * math.radians(lat - lat0),
+            )
+
+        anchors_xy = [to_xy(m["lat"], m["lon"]) for m in measurements]
+        distances = [m["distance"] for m in measurements]
+        weights = [m.get("weight", 1.0) for m in measurements]
+
+        x1, y1 = anchors_xy[0]
+        d1 = distances[0]
+
+        a11 = a12 = a22 = b1 = b2 = 0.0
+        for (xi, yi), di, weight in zip(anchors_xy[1:], distances[1:], weights[1:]):
+            ax = 2 * (xi - x1)
+            ay = 2 * (yi - y1)
+            bi = (xi**2 + yi**2 - di**2) - (x1**2 + y1**2 - d1**2)
+            w = math.sqrt(max(weight, 1e-6))
+            a11 += w * ax * ax
+            a12 += w * ax * ay
+            a22 += w * ay * ay
+            b1 += w * ax * bi
+            b2 += w * ay * bi
+
+        det = a11 * a22 - a12 * a12
+        if abs(det) < 1e-6:
+            return None
+
+        est_x = (b1 * a22 - b2 * a12) / det
+        est_y = (a11 * b2 - a12 * b1) / det
+
+        lat_est = lat0 + (est_y / earth_radius) * (180 / math.pi)
+        lon_est = lon0 + (est_x / (earth_radius * math.cos(lat0_rad))) * (180 / math.pi)
+
+        residuals = []
+        for (xi, yi), di in zip(anchors_xy, distances):
+            residuals.append(math.hypot(est_x - xi, est_y - yi) - di)
+        rmse = math.sqrt(sum(r**2 for r in residuals) / len(residuals)) if residuals else 0.0
+
+        return {"latitude": lat_est, "longitude": lon_est, "accuracy_meters": rmse}
+
+    @staticmethod
+    def _estimate_locations_from_rssi(
+        known_locations: list[dict[str, Any]],
+        packet_links: list[dict[str, Any]],
+    ) -> list[dict[str, Any]]:
+        """Estimate node locations using RSSI-derived distances to known gateway locations."""
+        cfg = get_config()
+        known_location_map = {loc["node_id"]: loc for loc in known_locations}
+
+        # Packet links contain avg_rssi/avg_snr for direct receptions; traceroute links contain avg_snr only.
+        measurements_by_node: dict[int, dict[int, dict[str, float]]] = {}
+        last_seen_by_node: dict[int, float] = {}
+
+        for link in packet_links:
+            measurements = link.get("measurements") or []
+            for measurement in measurements:
+                source_id = measurement.get("source_node_id")
+                gateway_id = measurement.get("gateway_node_id")
+                if source_id is None or gateway_id is None:
+                    continue
+                if source_id in known_location_map:
+                    continue
+                gateway_location = known_location_map.get(gateway_id)
+                if not gateway_location:
+                    continue
+
+                avg_rssi = measurement.get("avg_rssi")
+                avg_snr = measurement.get("avg_snr")
+                if avg_rssi is None or avg_rssi < cfg.rssi_min_quality_dbm:
+                    continue
+                if avg_snr is not None and avg_snr < cfg.snr_min_quality_db:
+                    continue
+
+                distance = LocationService._rssi_to_distance_meters(avg_rssi)
+                if distance is None:
+                    continue
+
+                packet_count = measurement.get("packet_count") or 1
+                weight = max(1.0, math.log10(packet_count + 1))
+
+                if source_id not in measurements_by_node:
+                    measurements_by_node[source_id] = {}
+
+                existing = measurements_by_node[source_id].get(gateway_id)
+                if existing:
+                    total_weight = existing["weight"] + weight
+                    existing["distance"] = (
+                        existing["distance"] * existing["weight"] + distance * weight
+                    ) / total_weight
+                    existing["weight"] = total_weight
+                else:
+                    measurements_by_node[source_id][gateway_id] = {
+                        "lat": gateway_location["latitude"],
+                        "lon": gateway_location["longitude"],
+                        "distance": distance,
+                        "weight": weight,
+                    }
+
+                last_seen = measurement.get("last_seen")
+                if last_seen:
+                    last_seen_by_node[source_id] = max(
+                        last_seen_by_node.get(source_id, 0), last_seen
+                    )
+
+        estimated_locations = []
+        if not measurements_by_node:
+            return estimated_locations
+
+        candidate_ids = list(measurements_by_node.keys())
+        name_map = get_bulk_node_names(candidate_ids)
+        short_name_map = get_bulk_node_short_names(candidate_ids)
+
+        for node_id, measurements in measurements_by_node.items():
+            if len(measurements) < 3:
+                continue
+            estimate = LocationService._solve_multilateration(list(measurements.values()))
+            if not estimate:
+                continue
+
+            display_name = name_map.get(node_id) or f"Node {node_id:08x}"
+            estimated_locations.append(
+                {
+                    "node_id": node_id,
+                    "hex_id": f"!{node_id:08x}",
+                    "display_name": display_name,
+                    "long_name": None,
+                    "short_name": short_name_map.get(node_id),
+                    "hw_model": None,
+                    "role": None,
+                    "primary_channel": None,
+                    "latitude": estimate["latitude"],
+                    "longitude": estimate["longitude"],
+                    "altitude": None,
+                    "timestamp": last_seen_by_node.get(node_id, time.time()),
+                    "precision_bits": None,
+                    "precision_meters": None,
+                    "sats_in_view": None,
+                    "accuracy_meters": estimate["accuracy_meters"],
+                    "estimated": True,
+                }
+            )
+
+        return estimated_locations
 
     @staticmethod
     def get_node_locations(
@@ -338,9 +516,48 @@ class LocationService:
                 "avg_snr": avg_snr,
                 "avg_rssi": avg_rssi,  # Added for heatmap
                 "last_seen_network": network_node.get("last_seen"),
+                "estimated": False,
+                "accuracy_meters": location.get("precision_meters"),
             }
 
             enhanced_locations.append(enhanced_location)
+
+        estimated_locations = LocationService._estimate_locations_from_rssi(
+            locations, packet_links or []
+        )
+        if estimated_locations:
+            for location in estimated_locations:
+                node_id = location["node_id"]
+                age_hours = (current_time - location["timestamp"]) / 3600
+
+                timestamp_dt = datetime.fromtimestamp(location["timestamp"], UTC)
+                timestamp_str = timestamp_dt.strftime("%Y-%m-%d %H:%M:%S UTC")
+
+                network_node = network_nodes.get(node_id, {})
+                direct_neighbors = neighbor_counts.get(node_id, 0)
+                neighbors = neighbor_details.get(node_id, [])
+
+                rssi_data = node_rssi_data.get(node_id, {})
+                avg_rssi = None
+                if rssi_data.get("rssi_count", 0) > 0:
+                    avg_rssi = rssi_data["rssi_sum"] / rssi_data["rssi_count"]
+                avg_snr = network_node.get("avg_snr")
+                if avg_snr is None and rssi_data.get("snr_count", 0) > 0:
+                    avg_snr = rssi_data["snr_sum"] / rssi_data["snr_count"]
+
+                enhanced_locations.append(
+                    {
+                        **location,
+                        "age_hours": round(age_hours, 2),
+                        "timestamp_str": timestamp_str,
+                        "direct_neighbors": direct_neighbors,
+                        "neighbors": neighbors,
+                        "packet_count": network_node.get("packet_count", 0),
+                        "avg_snr": avg_snr,
+                        "avg_rssi": avg_rssi,
+                        "last_seen_network": network_node.get("last_seen"),
+                    }
+                )
         timing_breakdown["enhancement"] = time.time() - enhancement_start
 
         total_service_time = time.time() - service_start
@@ -1101,9 +1318,20 @@ class LocationService:
                     "avg_rssi": row["avg_rssi"],
                     "age_hours": round(age_hours, 2) if age_hours is not None else None,
                     "last_seen_str": last_seen_str,
+                    "last_seen": row["last_seen"],
                     "is_bidirectional": False,  # will be updated below if we see both directions
                     "total_hops_seen": row["packet_count"],
                     "last_packet_id": None,
+                    "measurements": [
+                        {
+                            "source_node_id": from_node_id,
+                            "gateway_node_id": to_node_id,
+                            "avg_rssi": row["avg_rssi"],
+                            "avg_snr": row["avg_snr"],
+                            "packet_count": row["packet_count"],
+                            "last_seen": row["last_seen"],
+                        }
+                    ],
                 }
 
                 if key in link_map:
@@ -1136,6 +1364,16 @@ class LocationService:
                             existing["avg_rssi"] = (
                                 existing["avg_rssi"] + row["avg_rssi"]
                             ) / 2.0
+                    existing["measurements"].append(
+                        {
+                            "source_node_id": from_node_id,
+                            "gateway_node_id": to_node_id,
+                            "avg_rssi": row["avg_rssi"],
+                            "avg_snr": row["avg_snr"],
+                            "packet_count": row["packet_count"],
+                            "last_seen": row["last_seen"],
+                        }
+                    )
                 else:
                     link_map[key] = link_payload
 

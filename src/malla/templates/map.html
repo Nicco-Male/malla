@@ -200,6 +200,8 @@ controls_section, stats_section, legend_section, sidebar_styles %}
     "Sensor"},
     {"type": "span", "class": "role-color-indicator", "style": "background-color: #dc3545;", "content": "", "text":
     "Unknown Role"},
+    {"type": "span", "class": "role-color-indicator", "style": "background-color: #ffc107; border: 2px dashed #1f2d3d;", "content": "", "text":
+    "Estimated position"},
     {"type": "span", "class": "signal-indicator bg-success", "content": "", "text": "Excellent coverage"},
     {"type": "span", "class": "signal-indicator bg-warning", "content": "", "text": "Good coverage"},
     {"type": "span", "class": "signal-indicator bg-danger", "content": "", "text": "Limited coverage"},
@@ -400,6 +402,25 @@ controls_section, stats_section, legend_section, sidebar_styles %}
 
     .node-marker-container:hover {
         transform: scale(1.1);
+    }
+
+    .node-marker-container.estimated {
+        border: 2px dashed rgba(255, 193, 7, 0.9);
+        box-shadow: 0 0 0 2px rgba(255, 193, 7, 0.35);
+        position: relative;
+    }
+
+    .node-marker-badge {
+        position: absolute;
+        top: -6px;
+        right: -6px;
+        background: #ffc107;
+        color: #1f2d3d;
+        font-size: 10px;
+        font-weight: 700;
+        border-radius: 999px;
+        padding: 1px 5px;
+        box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
     }
 
     .node-marker-label {
@@ -1030,6 +1051,8 @@ controls_section, stats_section, legend_section, sidebar_styles %}
     function addNodeMarker(node) {
         // Create custom marker with role-based styling
         const roleColor = getRoleColor(node.role);
+        const estimatedClass = node.estimated ? ' estimated' : '';
+        const estimatedBadge = node.estimated ? '<div class="node-marker-badge">~</div>' : '';
 
         // Determine display text for the marker
         let displayText = node.short_name || node.display_name;
@@ -1045,8 +1068,9 @@ controls_section, stats_section, legend_section, sidebar_styles %}
         const markerIcon = L.divIcon({
             className: 'custom-node-marker',
             html: `
-            <div class="node-marker-container" style="background-color: ${roleColor};">
+            <div class="node-marker-container${estimatedClass}" style="background-color: ${roleColor};">
                 <div class="node-marker-label">${displayText}</div>
+                ${estimatedBadge}
             </div>
         `,
             iconSize: [40, 40],
@@ -1074,6 +1098,9 @@ controls_section, stats_section, legend_section, sidebar_styles %}
         const ageHours = (Date.now() / 1000 - node.timestamp) / 3600;
         const ageClass = getAgeClass(ageHours);
         const roleColor = getRoleColor(node.role);
+        const accuracyText = node.estimated && node.accuracy_meters
+            ? `<div><strong>Accuracy:</strong> ±${Math.round(node.accuracy_meters)}m</div>`
+            : '';
 
         return `
         <div class="node-marker-info">
@@ -1081,10 +1108,12 @@ controls_section, stats_section, legend_section, sidebar_styles %}
             <div><strong>ID:</strong> !${nodeIdHex}</div>
             ${node.short_name ? `<div><strong>Short Name:</strong> ${node.short_name}</div>` : ''}
             ${node.role ? `<div><strong>Role:</strong> <span class="badge" style="background-color: ${roleColor};">${node.role}</span></div>` : ''}
+            ${node.estimated ? `<div><strong>Location Type:</strong> Estimated</div>` : ''}
             <div><strong>Location:</strong> ${node.latitude.toFixed(6)}, ${node.longitude.toFixed(6)}</div>
             ${node.altitude ? `<div><strong>Altitude:</strong> ${node.altitude}m</div>` : ''}
             ${node.hw_model ? `<div><strong>Hardware:</strong> ${node.hw_model}</div>` : ''}
             <div><strong>Age:</strong> <span class="age-indicator ${ageClass}">${formatAge(ageHours)}</span></div>
+            ${accuracyText}
 
             <div class="mt-2">
                 <button class="btn btn-sm btn-primary" onclick="viewNodeDetails(${node.node_id})">
@@ -1149,10 +1178,11 @@ controls_section, stats_section, legend_section, sidebar_styles %}
             const ageHours = (Date.now() / 1000 - node.timestamp) / 3600;
             const ageClass = getAgeClass(ageHours);
             const roleColor = getRoleColor(node.role);
+            const estimatedBadge = node.estimated ? '<span class="badge bg-warning text-dark ms-1">Estimated</span>' : '';
 
             return `
             <div class="node-list-item" onclick="selectNodeFromList(${node.node_id})">
-                <div><strong>${node.display_name}</strong> ${node.role ? `<span class="badge badge-sm" style="background-color: ${roleColor}; font-size: 0.6em;">${formatRole(node.role)}</span>` : ''}</div>
+                <div><strong>${node.display_name}</strong> ${node.role ? `<span class="badge badge-sm" style="background-color: ${roleColor}; font-size: 0.6em;">${formatRole(node.role)}</span>` : ''} ${estimatedBadge}</div>
                 <small class="text-muted">!${nodeIdHex}</small><br>
                 <span class="age-indicator ${ageClass}">${formatAge(ageHours)}</span>
                 ${node.hw_model ? `<small class="text-secondary ms-2">${node.hw_model}</small>` : ''}
@@ -1206,11 +1236,15 @@ controls_section, stats_section, legend_section, sidebar_styles %}
         const ageHours = (Date.now() / 1000 - node.timestamp) / 3600;
         const ageClass = getAgeClass(ageHours);
         const roleColor = getRoleColor(node.role);
+        const estimatedBadge = node.estimated ? '<span class="badge bg-warning text-dark ms-2">Estimated</span>' : '';
+        const accuracyText = node.estimated && node.accuracy_meters
+            ? `<small class="text-muted">±${Math.round(node.accuracy_meters)}m</small>`
+            : '';
 
         const content = `
         <div class="row">
             <div class="col-12">
-                <h6>${node.display_name}</h6>
+                <h6>${node.display_name} ${estimatedBadge}</h6>
                 <p class="text-muted">Node ID: !${nodeIdHex}</p>
                 ${node.short_name ? `<p class="text-muted">Short: ${node.short_name}</p>` : ''}
             </div>
@@ -1218,7 +1252,8 @@ controls_section, stats_section, legend_section, sidebar_styles %}
         <div class="row">
             <div class="col-6">
                 <strong>Location:</strong><br>
-                <small>${node.latitude.toFixed(6)}, ${node.longitude.toFixed(6)}</small>
+                <small>${node.latitude.toFixed(6)}, ${node.longitude.toFixed(6)}</small><br>
+                ${accuracyText}
             </div>
             <div class="col-6">
                 <strong>Age:</strong><br>
@@ -1323,10 +1358,11 @@ controls_section, stats_section, legend_section, sidebar_styles %}
             const ageHours = (Date.now() / 1000 - node.timestamp) / 3600;
             const ageClass = getAgeClass(ageHours);
             const roleColor = getRoleColor(node.role);
+            const estimatedBadge = node.estimated ? '<span class="badge bg-warning text-dark ms-1">Estimated</span>' : '';
 
             return `
             <div class="node-list-item" onclick="selectNodeFromList(${node.node_id})">
-                <div><strong>${node.display_name}</strong> ${node.role ? `<span class="badge badge-sm" style="background-color: ${roleColor}; font-size: 0.6em;">${formatRole(node.role)}</span>` : ''}</div>
+                <div><strong>${node.display_name}</strong> ${node.role ? `<span class="badge badge-sm" style="background-color: ${roleColor}; font-size: 0.6em;">${formatRole(node.role)}</span>` : ''} ${estimatedBadge}</div>
                 <small class="text-muted">!${nodeIdHex}</small><br>
                 <span class="age-indicator ${ageClass}">${formatAge(ageHours)}</span>
                 ${node.hw_model ? `<small class="text-secondary ms-2">${node.hw_model}</small>` : ''}
@@ -1370,8 +1406,13 @@ controls_section, stats_section, legend_section, sidebar_styles %}
         // Use real GPS precision if available, otherwise fall back to age-based estimation
         let radiusMeters = 10; // Default precision
         let precisionSource = 'estimated';
+        let circleColor = '#007bff';
 
-        if (node.precision_meters && node.precision_meters > 0) {
+        if (node.estimated && node.accuracy_meters && node.accuracy_meters > 0) {
+            radiusMeters = node.accuracy_meters;
+            precisionSource = 'RSSI estimated';
+            circleColor = '#ffc107';
+        } else if (node.precision_meters && node.precision_meters > 0) {
             // Use actual GPS precision from the position packet
             radiusMeters = node.precision_meters;
             precisionSource = 'GPS reported';
@@ -1392,8 +1433,8 @@ controls_section, stats_section, legend_section, sidebar_styles %}
 
         // Create circle
         precisionCircle = L.circle([node.latitude, node.longitude], {
-            color: '#007bff',
-            fillColor: '#007bff',
+            color: circleColor,
+            fillColor: circleColor,
             fillOpacity: 0.1,
             radius: radiusMeters
         }).addTo(map);
