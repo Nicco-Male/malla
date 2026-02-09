@@ -89,6 +89,13 @@ class AppConfig:
     # OpenTelemetry settings
     otlp_endpoint: str | None = None
 
+    # RSSI-based distance estimation (log-distance path loss)
+    rssi_reference_dbm: float = -40.0
+    rssi_reference_distance_m: float = 1.0
+    rssi_path_loss_exponent: float = 2.0
+    rssi_min_quality_dbm: float = -100.0
+    snr_min_quality_db: float = -10.0
+
     # Internal attribute to remember the source file used
     _config_path: Path | None = field(default=None, repr=False, compare=False)
 
