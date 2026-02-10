@@ -1361,7 +1361,8 @@ document.addEventListener('DOMContentLoaded', function() {
                     backgroundColor: `${metric.color}55`,
                     tension: 0.25,
                     fill: false,
-                    pointRadius: 2
+                    pointRadius: 2,
+                    yAxisID: metric.key === 'voltage' ? 'yVoltage' : 'yMain'
                 };
             });
 
@@ -1405,8 +1406,21 @@ document.addEventListener('DOMContentLoaded', function() {
                                 callback: (value) => formatTimestamp(value)
                             }
                         },
-                        y: {
+                        yMain: {
+                            type: 'linear',
+                            position: 'left',
                             beginAtZero: false
+                        },
+                        yVoltage: {
+                            type: 'linear',
+                            position: 'right',
+                            beginAtZero: false,
+                            grid: {
+                                drawOnChartArea: false
+                            },
+                            ticks: {
+                                callback: (value) => `${Number(value).toFixed(2)}V`
+                            }
                         }
                     }
                 }
