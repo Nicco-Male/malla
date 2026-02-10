@@ -2528,12 +2528,24 @@ def api_node_relay_node_analysis(node_id):
         node_id_int = convert_node_id(node_id)
 
         data = NodeRepository.get_relay_node_analysis(node_id_int, limit=limit)
+        diagnostics = NodeRepository.get_relay_node_analysis_diagnostics(node_id_int)
+
+        empty_reason = None
+        if not data:
+            if diagnostics["total_gateway_packets"] == 0:
+                empty_reason = "no_gateway_packets"
+            elif diagnostics["packets_with_relay_node"] == 0:
+                empty_reason = "no_packets_with_relay_node"
+            else:
+                empty_reason = "no_distinct_relay_nodes"
 
         return jsonify(
             {
                 "relay_node_stats": data,
                 "total_count": len(data),
                 "total_packets": sum(stat["count"] for stat in data),
+                "diagnostics": diagnostics,
+                "empty_reason": empty_reason,
             }
         )
     except ValueError as e:

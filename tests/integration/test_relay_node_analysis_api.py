@@ -18,9 +18,12 @@ class TestRelayNodeAnalysisAPI:
         assert "relay_node_stats" in data
         assert "total_count" in data
         assert "total_packets" in data
+        assert "diagnostics" in data
+        assert "empty_reason" in data
 
         # relay_node_stats should be a list
         assert isinstance(data["relay_node_stats"], list)
+        assert isinstance(data["diagnostics"], dict)
 
     @pytest.mark.integration
     def test_relay_node_analysis_data_structure(self, client):
@@ -138,6 +141,22 @@ class TestRelayNodeAnalysisAPI:
             assert counts == sorted(counts, reverse=True), (
                 "Relay node stats should be sorted by count in descending order"
             )
+
+
+    @pytest.mark.integration
+    def test_relay_node_analysis_empty_reason_and_diagnostics(self, client):
+        """Test that empty responses include actionable diagnostics."""
+        response = client.get("/api/node/999999999/relay-node-analysis?limit=50")
+        assert response.status_code == 200
+
+        data = response.get_json()
+        assert data["relay_node_stats"] == []
+        assert data["empty_reason"] == "no_gateway_packets"
+
+        diagnostics = data["diagnostics"]
+        assert diagnostics["total_gateway_packets"] == 0
+        assert diagnostics["packets_with_relay_node"] == 0
+        assert diagnostics["distinct_relay_nodes"] == 0
 
     @pytest.mark.integration
     def test_relay_node_analysis_with_nonexistent_node(self, client):
