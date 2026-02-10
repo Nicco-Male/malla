@@ -132,7 +132,10 @@ class DirectReceptionsChart {
             document.getElementById('direct-receptions-content').style.display = 'block';
             this.currentDirection = direction;
 
-            if (!data.direct_receptions || data.direct_receptions.length === 0) {
+            const hasRenderablePackets = Array.isArray(data.direct_receptions)
+                && data.direct_receptions.some(nodeData => Array.isArray(nodeData.packets) && nodeData.packets.length > 0);
+
+            if (!hasRenderablePackets) {
                 this.showNoDataMessage(direction, chartContainer);
                 this.chartTraces = [];
                 this.nodeStats = [];
