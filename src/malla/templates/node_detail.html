@@ -288,7 +288,7 @@
             {% endif %}
 
             <!-- Telemetry History -->
-            <div class="card mb-4">
+            <div class="card mb-4" id="telemetryHistorySection">
                 <div class="card-header d-flex flex-wrap gap-3 justify-content-between align-items-center">
                     <div>
                         <h5 class="mb-1"><i class="bi bi-graph-up"></i> Telemetry History</h5>
@@ -1142,6 +1142,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const telemetryFrom = document.getElementById('telemetryFrom');
     const telemetryTo = document.getElementById('telemetryTo');
     const chartContainer = document.getElementById('telemetryHistoryChartContainer');
+    const telemetrySection = document.getElementById('telemetryHistorySection');
 
     if (!nodeId || !telemetryRange || !chartContainer) {
         return;
@@ -1260,6 +1261,13 @@ document.addEventListener('DOMContentLoaded', function() {
                 ${message}
             </div>
         `;
+    }
+
+    function setTelemetryVisibility(visible) {
+        if (!telemetrySection) {
+            return;
+        }
+        telemetrySection.style.display = visible ? '' : 'none';
     }
 
     function resetTelemetryChartContainer() {
@@ -1444,9 +1452,11 @@ document.addEventListener('DOMContentLoaded', function() {
             });
 
             if (!hasData) {
-                showTelemetryMessage('No telemetry history available for this range.');
+                setTelemetryVisibility(false);
                 return;
             }
+
+            setTelemetryVisibility(true);
 
             const canvas = resetTelemetryChartContainer();
             if (!canvas) {
