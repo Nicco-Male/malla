@@ -61,7 +61,14 @@ class RelayNodeAnalysis {
             loadingIndicator.style.display = 'none';
             contentDiv.style.display = 'block';
 
-            if (!data.relay_node_stats || data.relay_node_stats.length === 0) {
+            const relayStats = Array.isArray(data.relay_node_stats) ? data.relay_node_stats : [];
+            const totalCount = Number(data.total_count || relayStats.length || 0);
+            const totalPackets = Number(data.total_packets || 0);
+
+            // Hide the entire card when there is no meaningful relay data.
+            if (relayStats.length === 0 || totalCount === 0 || totalPackets === 0) {
+                this.clearTable(tableContainer);
+                contentDiv.style.display = 'none';
                 cardContainer.style.display = 'none';
                 return;
             }
@@ -69,11 +76,21 @@ class RelayNodeAnalysis {
             cardContainer.style.display = 'block';
 
             // Render the table
-            this.renderTable(data.relay_node_stats, tableContainer);
+            this.renderTable(relayStats, tableContainer);
 
         } catch (error) {
             console.error('Error loading relay node analysis:', error);
             this.showErrorMessage(error, cardContainer, loadingIndicator, contentDiv);
+        }
+    }
+
+    /**
+     * Clear table rows to avoid stale content when card is hidden
+     */
+    clearTable(container) {
+        const tbody = container.querySelector('tbody');
+        if (tbody) {
+            tbody.innerHTML = '';
         }
     }
 
@@ -133,37 +150,6 @@ class RelayNodeAnalysis {
 
             tbody.appendChild(row);
         });
-    }
-
-    /**
-     * Show no data message
-     */
-    showNoDataMessage(container, data = null) {
-        const tbody = container.querySelector('tbody');
-        if (!tbody) return;
-
-        const diagnostics = data?.diagnostics || {};
-        const totalGatewayPackets = Number(diagnostics.total_gateway_packets || 0);
-        const packetsWithRelayNode = Number(diagnostics.packets_with_relay_node || 0);
-
-        let detailMessage = 'This node may not have reported any packets with relay_node information.';
-
-        if (data?.empty_reason === 'no_gateway_packets') {
-            detailMessage = 'Questo nodo non ha ancora pacchetti nel database come gateway.';
-        } else if (data?.empty_reason === 'no_packets_with_relay_node') {
-            detailMessage = `Il nodo ha ${totalGatewayPackets} pacchetti come gateway, ma nessuno contiene relay_node valorizzato.`;
-        } else if (totalGatewayPackets > 0 && packetsWithRelayNode === 0) {
-            detailMessage = `Il nodo ha ${totalGatewayPackets} pacchetti come gateway, ma relay_node è sempre assente o 0.`;
-        }
-
-        tbody.innerHTML = `
-            <tr>
-                <td colspan="5" class="text-center text-muted py-3">
-                    <i class="bi bi-info-circle"></i> No relay node data available for this gateway.
-                    <br><small>${detailMessage}</small>
-                </td>
-            </tr>
-        `;
     }
 
     /**
