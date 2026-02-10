@@ -2656,7 +2656,7 @@ class NodeRepository:
                             MAX(p.timestamp) as last_seen
                         FROM packet_history p
                         LEFT JOIN node_info ni ON ni.node_id = p.from_node_id
-                        WHERE p.gateway_id = %s
+                        WHERE LOWER(p.gateway_id) = LOWER(%s)
                           AND p.from_node_id IS NOT NULL
                           AND p.from_node_id != %s
                           AND p.hop_start IS NOT NULL
@@ -2676,7 +2676,7 @@ class NodeRepository:
                             p.rssi,
                             p.snr
                         FROM packet_history p
-                        WHERE p.gateway_id = %s
+                        WHERE LOWER(p.gateway_id) = LOWER(%s)
                           AND p.from_node_id IS NOT NULL
                           AND p.from_node_id != %s
                           AND p.hop_start IS NOT NULL
@@ -2761,7 +2761,7 @@ class NodeRepository:
                         FROM packet_history p
                         WHERE p.from_node_id = %s
                           AND p.gateway_id IS NOT NULL
-                          AND p.gateway_id != %s
+                          AND LOWER(p.gateway_id) != LOWER(%s)
                           AND p.hop_start IS NOT NULL
                           AND p.hop_limit IS NOT NULL
                           AND (p.hop_start - p.hop_limit) = 0
@@ -2781,7 +2781,7 @@ class NodeRepository:
                         FROM packet_history p
                         WHERE p.from_node_id = %s
                           AND p.gateway_id IS NOT NULL
-                          AND p.gateway_id != %s
+                          AND LOWER(p.gateway_id) != LOWER(%s)
                           AND p.hop_start IS NOT NULL
                           AND p.hop_limit IS NOT NULL
                           AND (p.hop_start - p.hop_limit) = 0
