@@ -27,6 +27,16 @@ class AnalyticsService:
     _CACHE_TTL_SEC: int = 60  # one minute cache window
 
     @staticmethod
+    def _normalize_voltage(raw_voltage: float) -> float:
+        """Normalize telemetry voltage values to volts.
+
+        Current telemetry values are in volts, but some legacy payloads may use
+        millivolts. Keep typical battery voltages untouched and only scale down
+        implausibly large values.
+        """
+        return raw_voltage / 1000.0 if raw_voltage > 100 else raw_voltage
+
+    @staticmethod
     def _decode_telemetry_payload(
         raw_payload: bytes | memoryview,
     ) -> dict[str, float]:
@@ -67,7 +77,9 @@ class AnalyticsService:
             if device_metrics.HasField("battery_level"):
                 metrics["battery_level"] = float(device_metrics.battery_level)
             if device_metrics.HasField("voltage"):
-                metrics["voltage"] = float(device_metrics.voltage) / 1000.0
+                metrics["voltage"] = AnalyticsService._normalize_voltage(
+                    float(device_metrics.voltage)
+                )
 
         return metrics
 
@@ -1174,7 +1186,9 @@ class AnalyticsService:
                     ):
                         device_metrics = telemetry.device_metrics
                         if device_metrics.HasField("voltage"):
-                            metric_value = device_metrics.voltage / 1000.0
+                            metric_value = AnalyticsService._normalize_voltage(
+                                float(device_metrics.voltage)
+                            )
                     elif metric_type == "humidity" and telemetry.HasField(
                         "environment_metrics"
                     ):

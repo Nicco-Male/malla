@@ -662,6 +662,15 @@ def get_node_display_name(node_id: int | None) -> str:
     return f"Node {node_id:08x}"
 
 
+def normalize_voltage(raw_voltage: float) -> float:
+    """Normalize telemetry voltage values to volts.
+
+    Most payloads report volts (e.g. 4.09), while some legacy packets can
+    report millivolts.
+    """
+    return raw_voltage / 1000.0 if raw_voltage > 100 else raw_voltage
+
+
 def get_gateway_display_name(gateway_hex_id: str) -> str:
     """Get the best display name for a gateway hex ID, using cache if available."""
     if not gateway_hex_id:
@@ -1382,7 +1391,7 @@ def on_message(client: mqtt.Client, userdata: Any, msg: mqtt.MQTTMessage) -> Non
                     else "N/A"
                 )
                 voltage = (
-                    f"{device_metrics.voltage / 1000.0:.2f}V"
+                    f"{normalize_voltage(float(device_metrics.voltage)):.2f}V"
                     if device_metrics.HasField("voltage")
                     else "N/A"
                 )
@@ -1444,7 +1453,9 @@ def on_message(client: mqtt.Client, userdata: Any, msg: mqtt.MQTTMessage) -> Non
                     if device_metrics.HasField("battery_level"):
                         battery_level_value = int(device_metrics.battery_level)
                     if device_metrics.HasField("voltage"):
-                        voltage_value = float(device_metrics.voltage) / 1000.0
+                        voltage_value = normalize_voltage(
+                            float(device_metrics.voltage)
+                        )
 
                 conn = get_db_connection()
                 cursor = conn.cursor()

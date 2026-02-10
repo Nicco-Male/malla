@@ -1168,6 +1168,22 @@ class NodeRepository:
             logger.error(f"Error getting nodes: {e}")
             raise
 
+
+    @staticmethod
+    def _normalize_voltage_value(raw_voltage: float | None) -> float | None:
+        """Normalize voltage values for display across legacy/new units."""
+        if raw_voltage is None:
+            return None
+
+        value = float(raw_voltage)
+        # Legacy rows may already be divided by 1000 (e.g. 0.00409 for 4.09V).
+        if 0 < value < 0.1:
+            return value * 1000.0
+        # Some payloads can come in millivolts.
+        if value > 100:
+            return value / 1000.0
+        return value
+
     @staticmethod
     @track_query_time("select", "packet_history")
     def get_node_details(node_id: int) -> dict[str, Any] | None:
@@ -1224,7 +1240,9 @@ class NodeRepository:
                         "humidity": telemetry_row["humidity"],
                         "pressure": telemetry_row["pressure"],
                         "battery_level": telemetry_row["battery_level"],
-                        "voltage": telemetry_row["voltage"],
+                        "voltage": NodeRepository._normalize_voltage_value(
+                            telemetry_row["voltage"]
+                        ),
                         "last_updated": last_updated.strftime("%Y-%m-%d %H:%M:%S UTC")
                         if last_updated
                         else None,
