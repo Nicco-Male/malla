@@ -9,6 +9,7 @@ class DirectReceptionsChart {
         this.currentMetric = 'rssi';
         this.chartTraces = [];
         this.nodeStats = [];
+        this.timeRange = this.resolveTimeRange();
 
         this.initializeEventListeners();
     }
@@ -53,6 +54,39 @@ class DirectReceptionsChart {
         }
     }
 
+
+    resolveTimeRange() {
+        const nowTs = Math.floor(Date.now() / 1000);
+        const defaultStart = nowTs - (14 * 24 * 60 * 60);
+
+        const fromInput = document.getElementById('telemetryFrom');
+        const toInput = document.getElementById('telemetryTo');
+
+        const parseDateInputToTs = (value) => {
+            if (!value) return null;
+            const parsed = Date.parse(value);
+            if (Number.isNaN(parsed)) return null;
+            return Math.floor(parsed / 1000);
+        };
+
+        const startTs = parseDateInputToTs(fromInput && fromInput.value) ?? defaultStart;
+        const endTs = parseDateInputToTs(toInput && toInput.value) ?? nowTs;
+
+        return {
+            startTs,
+            endTs,
+            label: `${this.formatTimestampForSubtitle(startTs)} → ${this.formatTimestampForSubtitle(endTs)}`
+        };
+    }
+
+    formatTimestampForSubtitle(ts) {
+        if (typeof window.formatTimestamp === 'function') {
+            return window.formatTimestamp(ts);
+        }
+
+        return new Date(ts * 1000).toLocaleString();
+    }
+
     /**
      * Load the direct receptions chart
      */
@@ -70,7 +104,20 @@ class DirectReceptionsChart {
             document.getElementById('direct-receptions-loading').style.display = 'block';
             document.getElementById('direct-receptions-content').style.display = 'none';
 
-            const response = await fetch(`/api/node/${this.nodeId}/direct-receptions?limit=1000&direction=${direction}`);
+            this.timeRange = this.resolveTimeRange();
+            const params = new URLSearchParams({
+                limit: '1000',
+                direction,
+            });
+
+            if (this.timeRange.startTs !== null && this.timeRange.startTs !== undefined) {
+                params.set('start_ts', String(this.timeRange.startTs));
+            }
+            if (this.timeRange.endTs !== null && this.timeRange.endTs !== undefined) {
+                params.set('end_ts', String(this.timeRange.endTs));
+            }
+
+            const response = await fetch(`/api/node/${this.nodeId}/direct-receptions?${params.toString()}`);
             const data = await response.json();
 
             if (data.error) {
@@ -109,10 +156,11 @@ class DirectReceptionsChart {
      */
     updateDescription(direction) {
         const description = document.getElementById('direct-receptions-description');
+        const rangeLabel = this.timeRange?.label || 'all available time';
         if (direction === 'received') {
-            description.textContent = 'Packets received directly (0 hops) by this gateway from other nodes.';
+            description.textContent = `Packets received directly (0 hops) by this gateway from other nodes. Range: ${rangeLabel}.`;
         } else {
-            description.textContent = 'Packets from this node received directly (0 hops) by other gateways.';
+            description.textContent = `Packets from this node received directly (0 hops) by other gateways. Range: ${rangeLabel}.`;
         }
     }
 
