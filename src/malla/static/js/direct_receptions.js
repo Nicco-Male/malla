@@ -134,11 +134,13 @@ class DirectReceptionsChart {
 
             if (!data.direct_receptions || data.direct_receptions.length === 0) {
                 this.showNoDataMessage(direction, chartContainer);
-                this.clearLegendTable();
                 this.chartTraces = [];
                 this.nodeStats = [];
+                cardContainer.style.display = 'none';
                 return;
             }
+
+            this.setDataSectionsVisible(true);
 
             // Process data and create chart
             this.processChartData(data);
@@ -148,6 +150,38 @@ class DirectReceptionsChart {
         } catch (error) {
             console.error('Error loading direct receptions:', error);
             this.showErrorMessage(error, cardContainer, chartContainer);
+        }
+    }
+
+
+    /**
+     * Toggle visibility of detail sections based on availability of chart data
+     */
+    setDataSectionsVisible(hasData) {
+        const toggles = document.getElementById('direct-receptions-toggles');
+        const chartWrapper = document.getElementById('direct-receptions-chart-wrapper');
+        const chartHelp = document.getElementById('direct-receptions-chart-help');
+        const legendContainer = document.getElementById('direct-receptions-legend-container');
+        const emptyMessage = document.getElementById('direct-receptions-empty');
+
+        if (toggles) {
+            toggles.style.display = hasData ? '' : 'none';
+        }
+        if (chartWrapper) {
+            chartWrapper.style.display = hasData ? '' : 'none';
+        }
+        if (chartHelp) {
+            chartHelp.style.display = hasData ? '' : 'none';
+        }
+        if (legendContainer) {
+            legendContainer.style.display = hasData ? '' : 'none';
+        }
+        if (emptyMessage) {
+            emptyMessage.style.display = hasData ? 'none' : 'block';
+            if (hasData) {
+                emptyMessage.classList.remove('text-danger');
+                emptyMessage.innerHTML = '<i class="bi bi-info-circle"></i> No direct receptions found in the selected time range.';
+            }
         }
     }
 
@@ -167,16 +201,9 @@ class DirectReceptionsChart {
     /**
      * Show no data message
      */
-    showNoDataMessage(direction, chartContainer) {
-        chartContainer.innerHTML = `
-            <div class="d-flex align-items-center justify-content-center h-100">
-                <div class="text-center text-muted">
-                    <i class="bi bi-info-circle" style="font-size: 2rem;"></i>
-                    <div class="mt-2">No direct ${direction} data available</div>
-                    <div class="small">Try switching to the other direction</div>
-                </div>
-            </div>
-        `;
+    showNoDataMessage(_direction, chartContainer) {
+        this.setDataSectionsVisible(false);
+        chartContainer.innerHTML = '';
     }
 
     /**
@@ -187,17 +214,14 @@ class DirectReceptionsChart {
         document.getElementById('direct-receptions-loading').style.display = 'none';
         document.getElementById('direct-receptions-content').style.display = 'block';
 
-        chartContainer.innerHTML = `
-            <div class="d-flex align-items-center justify-content-center h-100">
-                <div class="text-center text-danger">
-                    <i class="bi bi-exclamation-triangle" style="font-size: 2rem;"></i>
-                    <div class="mt-2">Error loading direct receptions data</div>
-                    <div class="small">${error.message}</div>
-                </div>
-            </div>
-        `;
+        this.setDataSectionsVisible(false);
+        const emptyMessage = document.getElementById('direct-receptions-empty');
+        if (emptyMessage) {
+            emptyMessage.classList.add('text-danger');
+            emptyMessage.innerHTML = `<i class="bi bi-exclamation-triangle"></i> Error loading direct receptions data: ${error.message}`;
+        }
 
-        this.clearLegendTable('Error loading data');
+        chartContainer.innerHTML = '';
     }
 
     /**
