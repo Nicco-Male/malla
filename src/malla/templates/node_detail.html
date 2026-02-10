@@ -235,36 +235,24 @@
                 </div>
                 <div class="card-body">
                     <table class="table table-sm">
+                        {% if telemetry and telemetry.temperature is not none %}
                         <tr>
                             <th>Temperature:</th>
-                            <td>
-                                {% if telemetry and telemetry.temperature is not none %}
-                                    {{ "%.1f"|format(telemetry.temperature) }}°C
-                                {% else %}
-                                    <span class="text-muted">Unknown</span>
-                                {% endif %}
-                            </td>
+                            <td>{{ "%.1f"|format(telemetry.temperature) }}°C</td>
                         </tr>
+                        {% endif %}
+                        {% if telemetry and telemetry.humidity is not none %}
                         <tr>
                             <th>Humidity:</th>
-                            <td>
-                                {% if telemetry and telemetry.humidity is not none %}
-                                    {{ "%.1f"|format(telemetry.humidity) }}%
-                                {% else %}
-                                    <span class="text-muted">Unknown</span>
-                                {% endif %}
-                            </td>
+                            <td>{{ "%.1f"|format(telemetry.humidity) }}%</td>
                         </tr>
+                        {% endif %}
+                        {% if telemetry and telemetry.pressure is not none %}
                         <tr>
                             <th>Pressure:</th>
-                            <td>
-                                {% if telemetry and telemetry.pressure is not none %}
-                                    {{ "%.1f"|format(telemetry.pressure) }} hPa
-                                {% else %}
-                                    <span class="text-muted">Unknown</span>
-                                {% endif %}
-                            </td>
+                            <td>{{ "%.1f"|format(telemetry.pressure) }} hPa</td>
                         </tr>
+                        {% endif %}
                         <tr>
                             <th>Battery Level:</th>
                             <td>
@@ -332,7 +320,7 @@
                 </div>
                 <div class="card-body">
                     <div class="row g-3 mb-4">
-                        <div class="col-sm-6 col-lg-4">
+                        <div class="col-sm-6 col-lg-4" id="telemetryCardTemperature">
                             <div class="card card-metric h-100">
                                 <div class="card-body">
                                     <div class="metric-value" id="telemetryAvgTemperature">-</div>
@@ -341,7 +329,7 @@
                                 </div>
                             </div>
                         </div>
-                        <div class="col-sm-6 col-lg-4">
+                        <div class="col-sm-6 col-lg-4" id="telemetryCardHumidity">
                             <div class="card card-metric h-100">
                                 <div class="card-body">
                                     <div class="metric-value" id="telemetryAvgHumidity">-</div>
@@ -350,7 +338,7 @@
                                 </div>
                             </div>
                         </div>
-                        <div class="col-sm-6 col-lg-4">
+                        <div class="col-sm-6 col-lg-4" id="telemetryCardPressure">
                             <div class="card card-metric h-100">
                                 <div class="card-body">
                                     <div class="metric-value" id="telemetryAvgPressure">-</div>
@@ -1187,6 +1175,20 @@ document.addEventListener('DOMContentLoaded', function() {
         chart: null
     };
 
+    const telemetryConditionalCards = {
+        temperature: document.getElementById('telemetryCardTemperature'),
+        humidity: document.getElementById('telemetryCardHumidity'),
+        pressure: document.getElementById('telemetryCardPressure')
+    };
+
+    function setMetricVisibility(metricKey, visible) {
+        const card = telemetryConditionalCards[metricKey];
+        if (!card) {
+            return;
+        }
+        card.style.display = visible ? '' : 'none';
+    }
+
     function formatMetricValue(metricKey, value, decimals, unit) {
         if (value === null || value === undefined || Number.isNaN(value)) {
             return '-';
@@ -1205,8 +1207,11 @@ document.addEventListener('DOMContentLoaded', function() {
             if (!metricStats || !metricStats.count) {
                 elements.avg.textContent = '-';
                 elements.range.textContent = 'Min/Max: -';
+                setMetricVisibility(metric.key, false);
                 return;
             }
+
+            setMetricVisibility(metric.key, true);
             elements.avg.textContent = formatMetricValue(
                 metric.key,
                 metricStats.avg,
@@ -1349,22 +1354,24 @@ document.addEventListener('DOMContentLoaded', function() {
                 return;
             }
 
-            const datasets = telemetryMetrics.map(metric => {
-                const points = (data.series && data.series[metric.key]) || [];
-                return {
-                    label: metric.label,
-                    data: points.map(point => ({
-                        x: point.timestamp * 1000,
-                        y: point.value
-                    })),
-                    borderColor: metric.color,
-                    backgroundColor: `${metric.color}55`,
-                    tension: 0.25,
-                    fill: false,
-                    pointRadius: 2,
-                    yAxisID: metric.key === 'voltage' ? 'yVoltage' : 'yMain'
-                };
-            });
+            const datasets = telemetryMetrics
+                .map(metric => {
+                    const points = (data.series && data.series[metric.key]) || [];
+                    return {
+                        label: metric.label,
+                        data: points.map(point => ({
+                            x: point.timestamp * 1000,
+                            y: point.value
+                        })),
+                        borderColor: metric.color,
+                        backgroundColor: `${metric.color}55`,
+                        tension: 0.25,
+                        fill: false,
+                        pointRadius: 2,
+                        yAxisID: metric.key === 'voltage' ? 'yVoltage' : 'yMain'
+                    };
+                })
+                .filter(dataset => dataset.data.length > 0);
 
             const ctx = canvas.getContext('2d');
             telemetryChartState.chart = new Chart(ctx, {
