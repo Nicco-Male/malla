@@ -310,7 +310,7 @@
                             <option value="6h">6h</option>
                             <option value="1d">1d</option>
                         </select>
-                        <div id="telemetryCustomRange" class="d-flex flex-wrap align-items-center gap-2" style="display: none;">
+                        <div id="telemetryCustomRange" class="d-none flex-wrap align-items-center gap-2">
                             <input
                                 type="text"
                                 class="form-control form-control-sm"
@@ -1555,7 +1555,8 @@ document.addEventListener('DOMContentLoaded', function() {
 
     telemetryRange.addEventListener('change', () => {
         const isCustom = telemetryRange.value === 'custom';
-        telemetryCustomRange.style.display = isCustom ? 'flex' : 'none';
+        telemetryCustomRange.classList.toggle('d-none', !isCustom);
+        telemetryCustomRange.classList.toggle('d-flex', isCustom);
         if (isCustom) {
             initializeCustomRangeInputs();
             return;
