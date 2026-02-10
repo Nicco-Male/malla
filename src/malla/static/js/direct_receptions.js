@@ -132,7 +132,9 @@ class DirectReceptionsChart {
             document.getElementById('direct-receptions-content').style.display = 'block';
             this.currentDirection = direction;
 
-            if (!data.direct_receptions || data.direct_receptions.length === 0) {
+            const hasRenderablePackets = this.hasRenderableChartData(data.direct_receptions);
+
+            if (!hasRenderablePackets) {
                 this.showNoDataMessage(direction, chartContainer);
                 this.chartTraces = [];
                 this.nodeStats = [];
@@ -222,6 +224,25 @@ class DirectReceptionsChart {
         }
 
         chartContainer.innerHTML = '';
+    }
+
+    hasRenderableChartData(directReceptions) {
+        if (!Array.isArray(directReceptions) || directReceptions.length === 0) {
+            return false;
+        }
+
+        return directReceptions.some((nodeData) => {
+            if (!Array.isArray(nodeData?.packets)) {
+                return false;
+            }
+
+            return nodeData.packets.some((packet) => {
+                const hasValidTimestamp = Number.isFinite(Number(packet?.timestamp));
+                const hasValidSignalValue = Number.isFinite(Number(packet?.rssi)) || Number.isFinite(Number(packet?.snr));
+
+                return hasValidTimestamp && hasValidSignalValue;
+            });
+        });
     }
 
     /**
