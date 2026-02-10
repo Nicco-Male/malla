@@ -2188,6 +2188,52 @@ class NodeRepository:
 
     @staticmethod
     @track_query_time("select", "packet_history")
+    def get_relay_node_analysis_diagnostics(node_id: int) -> dict[str, int]:
+        """Get packet availability diagnostics for relay node analysis.
+
+        Returns counts useful for explaining empty-state scenarios in UI/API.
+        """
+        try:
+            conn = get_db_connection()
+            cursor = None
+            try:
+                cursor = conn.cursor(cursor_factory=RealDictCursor)
+
+                gateway_hex = f"!{node_id:08x}"
+                query = """
+                SELECT
+                    COUNT(*) AS total_gateway_packets,
+                    COUNT(*) FILTER (
+                        WHERE relay_node IS NOT NULL
+                        AND relay_node != 0
+                    ) AS packets_with_relay_node,
+                    COUNT(DISTINCT relay_node) FILTER (
+                        WHERE relay_node IS NOT NULL
+                        AND relay_node != 0
+                    ) AS distinct_relay_nodes
+                FROM packet_history
+                WHERE gateway_id = %s
+                """
+                cursor.execute(query, (gateway_hex,))
+                row = cursor.fetchone() or {}
+
+                return {
+                    "total_gateway_packets": int(row.get("total_gateway_packets") or 0),
+                    "packets_with_relay_node": int(
+                        row.get("packets_with_relay_node") or 0
+                    ),
+                    "distinct_relay_nodes": int(row.get("distinct_relay_nodes") or 0),
+                }
+            finally:
+                if cursor:
+                    cursor.close()
+                put_db_connection(conn)
+        except Exception as e:
+            logger.error(f"Error getting relay node diagnostics for {node_id}: {e}")
+            raise
+
+    @staticmethod
+    @track_query_time("select", "packet_history")
     def get_relay_node_analysis(node_id: int, limit: int = 50) -> list[dict[str, Any]]:
         """Get relay node analysis for packets reported by this gateway.
 
