@@ -228,6 +228,15 @@
                 </div>
             </div>
 
+            {% set has_telemetry_data = telemetry and (
+                telemetry.temperature is not none or
+                telemetry.humidity is not none or
+                telemetry.pressure is not none or
+                telemetry.battery_level is not none or
+                telemetry.voltage is not none or
+                telemetry.last_updated_timestamp
+            ) %}
+            {% if has_telemetry_data %}
             <!-- Telemetry -->
             <div class="card mb-4">
                 <div class="card-header">
@@ -235,37 +244,37 @@
                 </div>
                 <div class="card-body">
                     <table class="table table-sm">
-                        {% if telemetry and telemetry.temperature is not none %}
+                        {% if telemetry.temperature is not none %}
                         <tr>
                             <th>Temperature:</th>
                             <td>{{ "%.1f"|format(telemetry.temperature) }}°C</td>
                         </tr>
                         {% endif %}
-                        {% if telemetry and telemetry.humidity is not none %}
+                        {% if telemetry.humidity is not none %}
                         <tr>
                             <th>Humidity:</th>
                             <td>{{ "%.1f"|format(telemetry.humidity) }}%</td>
                         </tr>
                         {% endif %}
-                        {% if telemetry and telemetry.pressure is not none %}
+                        {% if telemetry.pressure is not none %}
                         <tr>
                             <th>Pressure:</th>
                             <td>{{ "%.1f"|format(telemetry.pressure) }} hPa</td>
                         </tr>
                         {% endif %}
-                        {% if telemetry and telemetry.battery_level is not none %}
+                        {% if telemetry.battery_level is not none %}
                         <tr>
                             <th>Battery Level:</th>
                             <td>{{ telemetry.battery_level }}%</td>
                         </tr>
                         {% endif %}
-                        {% if telemetry and telemetry.voltage is not none %}
+                        {% if telemetry.voltage is not none %}
                         <tr>
                             <th>Voltage:</th>
                             <td>{{ "%.2f"|format(telemetry.voltage) }} V</td>
                         </tr>
                         {% endif %}
-                        {% if telemetry and telemetry.last_updated_timestamp %}
+                        {% if telemetry.last_updated_timestamp %}
                         <tr>
                             <th>Last updated:</th>
                             <td>
@@ -276,6 +285,7 @@
                     </table>
                 </div>
             </div>
+            {% endif %}
 
             <!-- Telemetry History -->
             <div class="card mb-4">
