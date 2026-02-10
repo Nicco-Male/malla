@@ -2610,7 +2610,11 @@ class NodeRepository:
     @staticmethod
     @track_query_time("select", "packet_history")
     def get_bidirectional_direct_receptions(
-        node_id: int, direction: str = "received", limit: int = 1000
+        node_id: int,
+        direction: str = "received",
+        limit: int = 1000,
+        start_ts: int | None = None,
+        end_ts: int | None = None,
     ) -> list[dict[str, Any]]:
         """Get bidirectional direct receptions (0 hops) for a node.
 
@@ -2619,6 +2623,8 @@ class NodeRepository:
             direction: Either "received" (packets received by this gateway) or
                       "transmitted" (packets from this node received by other gateways).
             limit: Maximum number of packets to return. Defaults to 1000.
+            start_ts: Optional lower bound (unix timestamp, inclusive) for packet time.
+            end_ts: Optional upper bound (unix timestamp, inclusive) for packet time.
 
         Returns:
             List of dictionaries where each dict contains aggregated statistics per node
@@ -2634,7 +2640,19 @@ class NodeRepository:
                 stats_rows = []
                 packet_rows = []
                 result: list[dict[str, Any]] = []
-    
+
+                timestamp_filters: list[str] = []
+                timestamp_params: list[int] = []
+                if start_ts is not None:
+                    timestamp_filters.append("p.timestamp >= %s")
+                    timestamp_params.append(start_ts)
+                if end_ts is not None:
+                    timestamp_filters.append("p.timestamp <= %s")
+                    timestamp_params.append(end_ts)
+                timestamp_where = ""
+                if timestamp_filters:
+                    timestamp_where = "\n                          AND " + "\n                          AND ".join(timestamp_filters)
+
                 if direction == "received":
                     # Packets received by this node as a gateway (original behavior)
                     gateway_hex_id = f"!{node_id:08x}"
@@ -2661,7 +2679,7 @@ class NodeRepository:
                           AND p.from_node_id != %s
                           AND p.hop_start IS NOT NULL
                           AND p.hop_limit IS NOT NULL
-                          AND (p.hop_start - p.hop_limit) = 0
+                          AND (p.hop_start - p.hop_limit) = 0{timestamp_where}
                         GROUP BY p.from_node_id, ni.long_name, ni.short_name
                         ORDER BY packet_count DESC
                         LIMIT %s
@@ -2681,14 +2699,20 @@ class NodeRepository:
                           AND p.from_node_id != %s
                           AND p.hop_start IS NOT NULL
                           AND p.hop_limit IS NOT NULL
-                          AND (p.hop_start - p.hop_limit) = 0
+                          AND (p.hop_start - p.hop_limit) = 0{timestamp_where}
                         ORDER BY p.timestamp
                     """
     
-                    cursor.execute(stats_query, (gateway_hex_id, node_id, limit))
+                    cursor.execute(
+                        stats_query.format(timestamp_where=timestamp_where),
+                        (gateway_hex_id, node_id, *timestamp_params, limit),
+                    )
                     stats_rows = cursor.fetchall()
-    
-                    cursor.execute(packets_query, (gateway_hex_id, node_id))
+
+                    cursor.execute(
+                        packets_query.format(timestamp_where=timestamp_where),
+                        (gateway_hex_id, node_id, *timestamp_params),
+                    )
                     packet_rows = cursor.fetchall()
     
                     # Build result with both stats and packet data for received direction
@@ -2764,7 +2788,7 @@ class NodeRepository:
                           AND p.gateway_id != %s
                           AND p.hop_start IS NOT NULL
                           AND p.hop_limit IS NOT NULL
-                          AND (p.hop_start - p.hop_limit) = 0
+                          AND (p.hop_start - p.hop_limit) = 0{timestamp_where}
                         GROUP BY p.gateway_id
                         ORDER BY packet_count DESC
                         LIMIT %s
@@ -2784,14 +2808,20 @@ class NodeRepository:
                           AND p.gateway_id != %s
                           AND p.hop_start IS NOT NULL
                           AND p.hop_limit IS NOT NULL
-                          AND (p.hop_start - p.hop_limit) = 0
+                          AND (p.hop_start - p.hop_limit) = 0{timestamp_where}
                         ORDER BY p.timestamp
                     """
     
-                    cursor.execute(stats_query, (node_id, node_hex_id, limit))
+                    cursor.execute(
+                        stats_query.format(timestamp_where=timestamp_where),
+                        (node_id, node_hex_id, *timestamp_params, limit),
+                    )
                     stats_rows = cursor.fetchall()
-    
-                    cursor.execute(packets_query, (node_id, node_hex_id))
+
+                    cursor.execute(
+                        packets_query.format(timestamp_where=timestamp_where),
+                        (node_id, node_hex_id, *timestamp_params),
+                    )
                     packet_rows = cursor.fetchall()
     
                     # Get gateway node IDs for name lookup

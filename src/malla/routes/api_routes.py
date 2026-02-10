@@ -2484,6 +2484,14 @@ def api_node_direct_receptions(node_id):
     try:
         limit = request.args.get("limit", 1000, type=int)
         direction = request.args.get("direction", "received", type=str)
+        start_ts = request.args.get("start_ts", type=int)
+        end_ts = request.args.get("end_ts", type=int)
+
+        if start_ts is not None and end_ts is not None and end_ts < start_ts:
+            return (
+                jsonify({"error": "'end_ts' must be greater than or equal to 'start_ts'"}),
+                400,
+            )
 
         # Validate direction parameter
         if direction not in ["received", "transmitted"]:
@@ -2495,7 +2503,11 @@ def api_node_direct_receptions(node_id):
         node_id_int = convert_node_id(node_id)
 
         data = NodeRepository.get_bidirectional_direct_receptions(
-            node_id_int, direction=direction, limit=limit
+            node_id_int,
+            direction=direction,
+            limit=limit,
+            start_ts=start_ts,
+            end_ts=end_ts,
         )
 
         return jsonify(
