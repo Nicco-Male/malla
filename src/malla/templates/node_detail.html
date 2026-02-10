@@ -311,9 +311,25 @@
                             <option value="1d">1d</option>
                         </select>
                         <div id="telemetryCustomRange" class="d-flex flex-wrap align-items-center gap-2" style="display: none;">
-                            <input type="datetime-local" class="form-control form-control-sm" id="telemetryFrom">
+                            <input
+                                type="text"
+                                class="form-control form-control-sm"
+                                id="telemetryFrom"
+                                placeholder="gg/mm/aaaa, --:--"
+                                inputmode="numeric"
+                                pattern="\d{2}/\d{2}/\d{4},\s\d{2}:\d{2}"
+                                title="Formato richiesto: gg/mm/aaaa, hh:mm"
+                            >
                             <span class="text-muted small">to</span>
-                            <input type="datetime-local" class="form-control form-control-sm" id="telemetryTo">
+                            <input
+                                type="text"
+                                class="form-control form-control-sm"
+                                id="telemetryTo"
+                                placeholder="gg/mm/aaaa, --:--"
+                                inputmode="numeric"
+                                pattern="\d{2}/\d{2}/\d{4},\s\d{2}:\d{2}"
+                                title="Formato richiesto: gg/mm/aaaa, hh:mm"
+                            >
                             <button class="btn btn-sm btn-outline-primary" id="telemetryApply">Apply</button>
                         </div>
                     </div>
@@ -1275,6 +1291,87 @@ document.addEventListener('DOMContentLoaded', function() {
         return '1d';
     }
 
+    function formatItalianDateTime(date) {
+        if (!(date instanceof Date) || Number.isNaN(date.getTime())) {
+            return '';
+        }
+
+        return new Intl.DateTimeFormat('it-IT', {
+            day: '2-digit',
+            month: '2-digit',
+            year: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: false
+        }).format(date);
+    }
+
+    function parseItalianDateTime(value) {
+        if (!value) {
+            return null;
+        }
+
+        const normalized = value.trim();
+        const match = normalized.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4}),?\s+(\d{1,2}):(\d{2})$/);
+        if (!match) {
+            return null;
+        }
+
+        const [, dayStr, monthStr, yearStr, hourStr, minuteStr] = match;
+        const day = Number.parseInt(dayStr, 10);
+        const month = Number.parseInt(monthStr, 10);
+        const year = Number.parseInt(yearStr, 10);
+        const hour = Number.parseInt(hourStr, 10);
+        const minute = Number.parseInt(minuteStr, 10);
+
+        if (
+            !Number.isFinite(day) ||
+            !Number.isFinite(month) ||
+            !Number.isFinite(year) ||
+            !Number.isFinite(hour) ||
+            !Number.isFinite(minute)
+        ) {
+            return null;
+        }
+
+        const parsed = new Date(year, month - 1, day, hour, minute, 0, 0);
+        if (
+            Number.isNaN(parsed.getTime()) ||
+            parsed.getFullYear() !== year ||
+            parsed.getMonth() !== month - 1 ||
+            parsed.getDate() !== day ||
+            parsed.getHours() !== hour ||
+            parsed.getMinutes() !== minute
+        ) {
+            return null;
+        }
+
+        return parsed;
+    }
+
+    function initializeCustomRangeInputs() {
+        if (!telemetryFrom || !telemetryTo) {
+            return;
+        }
+
+        const toDate = parseItalianDateTime(telemetryTo.value) || new Date();
+        const fromDate = parseItalianDateTime(telemetryFrom.value) || new Date(toDate.getTime() - (24 * 3600 * 1000));
+
+        telemetryFrom.value = formatItalianDateTime(fromDate);
+        telemetryTo.value = formatItalianDateTime(toDate);
+    }
+
+    function normalizeCustomInputValue(input) {
+        if (!input) {
+            return;
+        }
+
+        const parsed = parseItalianDateTime(input.value);
+        if (parsed) {
+            input.value = formatItalianDateTime(parsed);
+        }
+    }
+
     function getSelectedRange() {
         const rangeValue = telemetryRange.value;
         if (rangeValue === 'custom') {
@@ -1283,8 +1380,15 @@ document.addEventListener('DOMContentLoaded', function() {
             if (!fromValue || !toValue) {
                 return null;
             }
-            const fromTs = new Date(fromValue).getTime() / 1000;
-            const toTs = new Date(toValue).getTime() / 1000;
+
+            const fromDate = parseItalianDateTime(fromValue);
+            const toDate = parseItalianDateTime(toValue);
+            if (!fromDate || !toDate) {
+                return null;
+            }
+
+            const fromTs = fromDate.getTime() / 1000;
+            const toTs = toDate.getTime() / 1000;
             if (!Number.isFinite(fromTs) || !Number.isFinite(toTs) || toTs <= fromTs) {
                 return null;
             }
@@ -1442,9 +1546,11 @@ document.addEventListener('DOMContentLoaded', function() {
     telemetryRange.addEventListener('change', () => {
         const isCustom = telemetryRange.value === 'custom';
         telemetryCustomRange.style.display = isCustom ? 'flex' : 'none';
-        if (!isCustom) {
-            loadTelemetryHistory();
+        if (isCustom) {
+            initializeCustomRangeInputs();
+            return;
         }
+        loadTelemetryHistory();
     });
 
     if (telemetryBucket) {
@@ -1456,6 +1562,14 @@ document.addEventListener('DOMContentLoaded', function() {
             event.preventDefault();
             loadTelemetryHistory();
         });
+    }
+
+    if (telemetryFrom) {
+        telemetryFrom.addEventListener('blur', () => normalizeCustomInputValue(telemetryFrom));
+    }
+
+    if (telemetryTo) {
+        telemetryTo.addEventListener('blur', () => normalizeCustomInputValue(telemetryTo));
     }
 
     loadTelemetryHistory();
