@@ -62,9 +62,11 @@ class RelayNodeAnalysis {
             contentDiv.style.display = 'block';
 
             if (!data.relay_node_stats || data.relay_node_stats.length === 0) {
-                this.showNoDataMessage(tableContainer, data);
+                cardContainer.style.display = 'none';
                 return;
             }
+
+            cardContainer.style.display = 'block';
 
             // Render the table
             this.renderTable(data.relay_node_stats, tableContainer);
