@@ -1752,6 +1752,18 @@ controls_section, stats_section, legend_section, sidebar_styles %}
         drawPacketLinksFiltered(nodeId);
     }
 
+    // Calculate haversine distance between two coordinates (in km)
+    function calculateDistanceKm(lat1, lon1, lat2, lon2) {
+        const R = 6371;
+        const dLat = (lat2 - lat1) * Math.PI / 180;
+        const dLon = (lon2 - lon1) * Math.PI / 180;
+        const a = Math.sin(dLat / 2) * Math.sin(dLat / 2)
+            + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180)
+            * Math.sin(dLon / 2) * Math.sin(dLon / 2);
+        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+        return R * c;
+    }
+
     // Create popup content for traceroute links
     function createLinkPopupContent(link) {
         const fromNode = nodeData.find(n => n.node_id === link.from_node_id);
@@ -1774,6 +1786,10 @@ controls_section, stats_section, legend_section, sidebar_styles %}
             fromNode.latitude && fromNode.longitude &&
             toNode.latitude && toNode.longitude;
 
+        const distanceKm = hasLocations
+            ? calculateDistanceKm(fromNode.latitude, fromNode.longitude, toNode.latitude, toNode.longitude)
+            : null;
+
         return `
         <div class="traceroute-link-info">
             <div class="fw-bold mb-2">${link.link_type === 'packet' ? 'Direct Packet Link' : 'Traceroute RF Hop'}</div>
@@ -1781,6 +1797,7 @@ controls_section, stats_section, legend_section, sidebar_styles %}
             <div><strong>To:</strong> ${toName}</div>
             <div><strong>Success Rate:</strong> <span class="${qualityClass}">${link.success_rate.toFixed(1)}%</span></div>
             <div><strong>Attempts:</strong> ${link.total_hops_seen}</div>
+            ${distanceKm !== null ? `<div><strong>Distance:</strong> ${distanceKm.toFixed(1)} km</div>` : ''}
             <div><strong>Last Seen:</strong> ${formattedTime}</div>
             ${link.avg_snr ? `<div><strong>Avg SNR:</strong> ${link.avg_snr.toFixed(1)} dB</div>` : ''}
             ${link.avg_rssi ? `<div><strong>Avg RSSI:</strong> ${link.avg_rssi.toFixed(0)} dBm</div>` : ''}
