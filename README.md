@@ -15,6 +15,7 @@ My Map:
 - itamap.niccomale.it (Italy): https://itamap.niccomale.it/
 - tuscanymap.niccomale.it (Tuscany IT): https://tuscanymap.niccomale.it/
 - campania.niccomale.it (Campania IT): https://campania.niccomale.it/
+- puglia.niccomale.it (Puglia IT): https://puglia.niccomale.it/
 
 ## Components
 - `malla-capture`: subscribes to your Meshtastic MQTT broker, optionally decrypts secondary channels, and writes packets/node info into PostgreSQL with schema migrations and background data cleanup.
