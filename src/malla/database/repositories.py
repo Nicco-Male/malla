@@ -3833,11 +3833,12 @@ class LocationRepository:
                 query = """
                     SELECT
                         timestamp,
+                        portnum,
                         raw_payload,
                         to_timestamp(timestamp) as timestamp_str
                     FROM packet_history
                     WHERE from_node_id = %s
-                    AND portnum = 3  -- POSITION_APP
+                    AND portnum IN (3, 73)  -- POSITION_APP and MAP_REPORT_APP
                     AND raw_payload IS NOT NULL
                     ORDER BY timestamp DESC
                     LIMIT %s
@@ -3851,18 +3852,15 @@ class LocationRepository:
                         if not row["raw_payload"]:
                             continue
     
-                        # Decode position from raw protobuf payload
-                        position = mesh_pb2.Position()
-                        position.ParseFromString(row["raw_payload"])
-    
-                        # Extract coordinates (stored as integers, need to divide by 1e7)
-                        latitude = (
-                            position.latitude_i / 1e7 if position.latitude_i else None
+                        location_data = decode_position_from_raw_payload(
+                            row["portnum"], row["raw_payload"]
                         )
-                        longitude = (
-                            position.longitude_i / 1e7 if position.longitude_i else None
-                        )
-                        altitude = position.altitude if position.altitude else None
+                        if location_data is None:
+                            continue
+
+                        latitude = location_data["latitude"]
+                        longitude = location_data["longitude"]
+                        altitude = location_data["altitude"]
     
                         # Skip invalid coordinates
                         if not latitude or not longitude:
@@ -3983,10 +3981,10 @@ class LocationRepository:
 
                 # First try to get the most recent location before or at the target timestamp
                 query_before = """
-                    SELECT timestamp, raw_payload
+                    SELECT timestamp, portnum, raw_payload
                     FROM packet_history
                     WHERE from_node_id = %s
-                    AND portnum = 3  -- POSITION_APP
+                    AND portnum IN (3, 73)  -- POSITION_APP and MAP_REPORT_APP
                     AND timestamp <= %s
                     AND raw_payload IS NOT NULL
                     ORDER BY timestamp DESC
@@ -3999,7 +3997,7 @@ class LocationRepository:
                 if location_before:
                     try:
                         location_data = decode_position_from_raw_payload(
-                            3, location_before["raw_payload"]
+                            location_before["portnum"], location_before["raw_payload"]
                         )
                         if location_data:
                             latitude = location_data["latitude"]
@@ -4029,10 +4027,10 @@ class LocationRepository:
 
                 # If no location before target, try to get the earliest location after
                 query_after = """
-                    SELECT timestamp, raw_payload
+                    SELECT timestamp, portnum, raw_payload
                     FROM packet_history
                     WHERE from_node_id = %s
-                    AND portnum = 3  -- POSITION_APP
+                    AND portnum IN (3, 73)  -- POSITION_APP and MAP_REPORT_APP
                     AND timestamp > %s
                     AND raw_payload IS NOT NULL
                     ORDER BY timestamp ASC
@@ -4045,7 +4043,7 @@ class LocationRepository:
                 if location_after:
                     try:
                         location_data = decode_position_from_raw_payload(
-                            3, location_after["raw_payload"]
+                            location_after["portnum"], location_after["raw_payload"]
                         )
                         if location_data:
                             latitude = location_data["latitude"]
