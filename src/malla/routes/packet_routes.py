@@ -15,6 +15,7 @@ from ..database.connection import get_db_connection, put_db_connection
 from ..database.repositories import LocationRepository, NodeRepository
 from ..instrumentation import register_metrics
 from ..models.traceroute import TraceroutePacket
+from ..utils.location_payload import decode_position_from_raw_payload
 from ..utils.node_utils import convert_node_id, get_bulk_node_names
 from ..utils.traceroute_graph import build_combined_traceroute_graph
 
@@ -482,16 +483,15 @@ def decode_packet_payload(packet: dict[str, Any]) -> dict[str, Any] | None:
                 # Convert raw protobuf fields to user-friendly format
                 # Both POSITION_APP and MAP_REPORT_APP contain Position messages
                 raw_data = decoded_payload
+                location_data = decode_position_from_raw_payload(
+                    packet.get("portnum"), packet.get("raw_payload")
+                )
                 payload_info["data"] = {
-                    "latitude": raw_data.get("latitude_i", 0) / 1e7
-                    if raw_data.get("latitude_i")
-                    else None,
-                    "longitude": raw_data.get("longitude_i", 0) / 1e7
-                    if raw_data.get("longitude_i")
-                    else None,
-                    "altitude": raw_data.get("altitude"),
+                    "latitude": location_data.get("latitude") if location_data else None,
+                    "longitude": location_data.get("longitude") if location_data else None,
+                    "altitude": location_data.get("altitude") if location_data else None,
                     "sats_in_view": raw_data.get("sats_in_view"),
-                    "precision_bits": raw_data.get("precision_bits"),
+                    "precision_bits": location_data.get("precision") if location_data else None,
                 }
 
             elif packet["portnum_name"] == "NODEINFO_APP":
