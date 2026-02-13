@@ -3577,7 +3577,6 @@ class LocationRepository:
                         node_ids_clause = f"AND from_node_id IN ({placeholders})"
                         node_ids_params = node_ids_int
     
-                # Optimized query using DISTINCT ON (more efficient than CTE + JOIN)
                 # Add time filtering to limit scan scope
                 time_filter = ""
                 time_params: list[Any] = []
@@ -3587,30 +3586,49 @@ class LocationRepository:
                 if filters.get("end_time"):
                     time_filter += " AND timestamp <= %s"
                     time_params.append(filters["end_time"])
+
+                # How many recent packets to inspect for each node before giving up.
+                # This avoids hiding a node when the latest packet has incomplete coordinates.
+                per_node_packet_lookback = int(filters.get("location_packet_lookback", 5))
+                per_node_packet_lookback = max(1, per_node_packet_lookback)
     
-                # Use DISTINCT ON for better performance - PostgreSQL optimizes this well
                 query = (
                     """
-                    SELECT DISTINCT ON (ph.from_node_id)
-                        ph.from_node_id as node_id,
-                        ph.timestamp,
-                        ph.raw_payload,
+                    WITH ranked_positions AS (
+                        SELECT
+                            ph.from_node_id as node_id,
+                            ph.timestamp,
+                            ph.raw_payload,
+                            row_number() OVER (
+                                PARTITION BY ph.from_node_id
+                                ORDER BY ph.timestamp DESC
+                            ) as row_num
+                        FROM packet_history ph
+                        WHERE ph.portnum IN (3, 73)
+                        AND ph.raw_payload IS NOT NULL
+                        AND ph.from_node_id IS NOT NULL
+                    """
+                    + (node_ids_clause if node_ids_clause else "")
+                    + time_filter
+                    + """
+                    )
+                    SELECT
+                        rp.node_id,
+                        rp.timestamp,
+                        rp.raw_payload,
+                        rp.row_num,
                         ni.long_name,
                         ni.short_name,
                         ni.hw_model,
                         ni.role,
                         ni.primary_channel,
-                        ('!' || lpad(to_hex(ph.from_node_id), 8, '0')) as hex_id
-                    FROM packet_history ph
-                    LEFT JOIN node_info ni ON ph.from_node_id = ni.node_id
-                    WHERE ph.portnum IN (3, 73)
-                    AND ph.raw_payload IS NOT NULL
-                    AND ph.from_node_id IS NOT NULL
+                        ('!' || lpad(to_hex(rp.node_id), 8, '0')) as hex_id
+                    FROM ranked_positions rp
+                    LEFT JOIN node_info ni ON rp.node_id = ni.node_id
+                    WHERE rp.row_num <= %s
                     """
-                    + (node_ids_clause if node_ids_clause else "")
-                    + time_filter
                     + """
-                    ORDER BY ph.from_node_id, ph.timestamp DESC
+                    ORDER BY rp.node_id, rp.row_num
                 """
                 )
     
@@ -3632,8 +3650,8 @@ class LocationRepository:
                     logger.debug(f"Index creation skipped or failed: {e}")
     
                 query_start = time.time()
-                # Combine all parameters: node_ids first, then time filters
-                all_params = node_ids_params + time_params
+                # Combine all parameters: node_ids first, then time filters, then row limit
+                all_params = node_ids_params + time_params + [per_node_packet_lookback]
                 cursor.execute(query, all_params)
                 raw_rows = cursor.fetchall()
                 timing_breakdown["sql_query"] = time.time() - query_start
@@ -3643,9 +3661,13 @@ class LocationRepository:
                 locations = []
                 decode_count = 0
                 skip_count = 0
-    
+                nodes_with_location: set[int] = set()
+
                 for row in raw_rows:
                     try:
+                        if row["node_id"] in nodes_with_location:
+                            continue
+
                         if not row["raw_payload"]:
                             skip_count += 1
                             continue
@@ -3759,6 +3781,7 @@ class LocationRepository:
                                 "sats_in_view": sats_in_view,
                             }
                         )
+                        nodes_with_location.add(row["node_id"])
                     except Exception as e:
                         logger.warning(
                             f"Failed to parse location for node {row['node_id']}: {e}"
