@@ -19,6 +19,7 @@ from ..utils.formatting import format_time_ago
 from ..utils.location_payload import decode_position_from_raw_payload
 from ..utils.node_utils import get_bulk_node_short_names
 from .connection import get_db_connection, put_db_connection
+from ..metrics import LOCATION_DECODE_SKIPPED_TOTAL
 from .metrics_decorator import track_query_time
 
 logger = logging.getLogger(__name__)
@@ -3645,6 +3646,8 @@ class LocationRepository:
                 locations = []
                 decode_count = 0
                 skip_count = 0
+                skip_port_3_count = 0
+                skip_port_73_count = 0
     
                 for row in raw_rows:
                     try:
@@ -3658,6 +3661,10 @@ class LocationRepository:
                         )
                         if location_data is None:
                             skip_count += 1
+                            if row["portnum"] == 3:
+                                skip_port_3_count += 1
+                            elif row["portnum"] == 73:
+                                skip_port_73_count += 1
                             continue
 
                         position_precision = (
@@ -3799,6 +3806,21 @@ class LocationRepository:
                         f"- {len(locations)} locations"
                     )
     
+                logger.info(
+                    "get_node_locations decode breakdown: candidates=%s, success=%s, "
+                    "skipped_port_3=%s, skipped_port_73=%s",
+                    len(raw_rows),
+                    decode_count,
+                    skip_port_3_count,
+                    skip_port_73_count,
+                )
+                LOCATION_DECODE_SKIPPED_TOTAL.labels(
+                    endpoint="get_node_locations", portnum="3"
+                ).inc(skip_port_3_count)
+                LOCATION_DECODE_SKIPPED_TOTAL.labels(
+                    endpoint="get_node_locations", portnum="73"
+                ).inc(skip_port_73_count)
+
                 return locations
     
             finally:
@@ -3820,7 +3842,7 @@ class LocationRepository:
             cursor = None
             try:
                 cursor = conn.cursor(cursor_factory=RealDictCursor)
-    
+
                 # Handle different node ID formats
                 if isinstance(node_id, str):
                     if node_id.startswith("!"):
@@ -3829,7 +3851,7 @@ class LocationRepository:
                         node_id = (
                             int(node_id, 16) if not node_id.isdigit() else int(node_id)
                         )
-    
+
                 query = """
                     SELECT
                         timestamp,
@@ -3843,29 +3865,37 @@ class LocationRepository:
                     ORDER BY timestamp DESC
                     LIMIT %s
                 """
-    
+
                 cursor.execute(query, (node_id, limit))
+                rows = cursor.fetchall()
                 locations = []
-    
-                for row in cursor.fetchall():
+                decode_count = 0
+                skip_port_3_count = 0
+                skip_port_73_count = 0
+
+                for row in rows:
                     try:
                         if not row["raw_payload"]:
                             continue
-    
+
                         location_data = decode_position_from_raw_payload(
                             row["portnum"], row["raw_payload"]
                         )
                         if location_data is None:
+                            if row["portnum"] == 3:
+                                skip_port_3_count += 1
+                            elif row["portnum"] == 73:
+                                skip_port_73_count += 1
                             continue
 
                         latitude = location_data["latitude"]
                         longitude = location_data["longitude"]
                         altitude = location_data["altitude"]
-    
+
                         # Skip invalid coordinates
                         if not latitude or not longitude:
                             continue
-    
+
                         locations.append(
                             {
                                 "latitude": latitude,
@@ -3875,14 +3905,31 @@ class LocationRepository:
                                 "timestamp_str": row["timestamp_str"],
                             }
                         )
+                        decode_count += 1
                     except Exception as e:
                         logger.warning(
                             f"Failed to parse location for timestamp {row['timestamp']}: {e}"
                         )
                         continue
-    
+
+                logger.info(
+                    "get_node_location_history decode breakdown: node_id=%s, candidates=%s, "
+                    "success=%s, skipped_port_3=%s, skipped_port_73=%s",
+                    node_id,
+                    len(rows),
+                    decode_count,
+                    skip_port_3_count,
+                    skip_port_73_count,
+                )
+                LOCATION_DECODE_SKIPPED_TOTAL.labels(
+                    endpoint="get_node_location_history", portnum="3"
+                ).inc(skip_port_3_count)
+                LOCATION_DECODE_SKIPPED_TOTAL.labels(
+                    endpoint="get_node_location_history", portnum="73"
+                ).inc(skip_port_73_count)
+
                 return locations
-    
+
             finally:
                 if cursor:
                     cursor.close()

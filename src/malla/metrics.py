@@ -78,6 +78,12 @@ API_REQUESTS_TOTAL = _counter(
     ["endpoint", "status"],
 )
 
+LOCATION_DECODE_SKIPPED_TOTAL = _counter(
+    "malla_location_decode_skipped_total",
+    "Total number of skipped location payload decodes",
+    ["endpoint", "portnum"],
+)
+
 
 def _get_registry() -> CollectorRegistry:
     """Return the appropriate registry for scraping (multiprocess-aware)."""
