@@ -3650,9 +3650,13 @@ class LocationRepository:
                         if not row["raw_payload"]:
                             skip_count += 1
                             continue
-    
+
                         # Decode location from raw protobuf payload according to portnum
-                        position_precision = None
+                        latitude_i = None
+                        longitude_i = None
+                        altitude = None
+                        precision_bits = None
+                        precision_meters = None
                         sats_in_view = None
                         if row["portnum"] == 3:  # POSITION_APP
                             position = mesh_pb2.Position()
@@ -3668,10 +3672,9 @@ class LocationRepository:
                             latitude_i = map_report.latitude_i
                             longitude_i = map_report.longitude_i
                             altitude = map_report.altitude if map_report.altitude else None
-                            position_precision = getattr(
+                            precision_bits = getattr(
                                 map_report, "position_precision", None
                             )
-                            precision_bits = position_precision
                         else:
                             skip_count += 1
                             continue
@@ -3683,7 +3686,6 @@ class LocationRepository:
     
                         # Calculate precision in meters from precision_bits
                         # Based on Meshtastic documentation: https://meshtastic.org/docs/configuration/radio/channels/#position-precision
-                        precision_meters = None
                         if precision_bits is not None and precision_bits > 0:
                             # Mapping from Meshtastic documentation
                             precision_map = {
@@ -3770,7 +3772,6 @@ class LocationRepository:
                                 "precision_bits": precision_bits,
                                 "precision_meters": precision_meters,
                                 "sats_in_view": sats_in_view,
-                                "position_precision": position_precision,
                             }
                         )
                     except Exception as e:
