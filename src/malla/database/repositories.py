@@ -3593,6 +3593,7 @@ class LocationRepository:
                     """
                     SELECT DISTINCT ON (ph.from_node_id)
                         ph.from_node_id as node_id,
+                        ph.portnum,
                         ph.timestamp,
                         ph.raw_payload,
                         ni.long_name,
@@ -3650,23 +3651,35 @@ class LocationRepository:
                             skip_count += 1
                             continue
     
-                        # Decode position from raw protobuf payload
-                        position = mesh_pb2.Position()
-                        position.ParseFromString(row["raw_payload"])
+                        # Decode location from raw protobuf payload according to portnum
+                        position_precision = None
+                        sats_in_view = None
+                        if row["portnum"] == 3:  # POSITION_APP
+                            position = mesh_pb2.Position()
+                            position.ParseFromString(row["raw_payload"])
+                            latitude_i = position.latitude_i
+                            longitude_i = position.longitude_i
+                            altitude = position.altitude if position.altitude else None
+                            precision_bits = getattr(position, "precision_bits", None)
+                            sats_in_view = getattr(position, "sats_in_view", None)
+                        elif row["portnum"] == 73:  # MAP_REPORT_APP
+                            map_report = mesh_pb2.MapReport()
+                            map_report.ParseFromString(row["raw_payload"])
+                            latitude_i = map_report.latitude_i
+                            longitude_i = map_report.longitude_i
+                            altitude = map_report.altitude if map_report.altitude else None
+                            position_precision = getattr(
+                                map_report, "position_precision", None
+                            )
+                            precision_bits = position_precision
+                        else:
+                            skip_count += 1
+                            continue
                         decode_count += 1
-    
+
                         # Extract coordinates (stored as integers, need to divide by 1e7)
-                        latitude = (
-                            position.latitude_i / 1e7 if position.latitude_i else None
-                        )
-                        longitude = (
-                            position.longitude_i / 1e7 if position.longitude_i else None
-                        )
-                        altitude = position.altitude if position.altitude else None
-    
-                        # Extract precision and satellite information
-                        precision_bits = getattr(position, "precision_bits", None)
-                        sats_in_view = getattr(position, "sats_in_view", None)
+                        latitude = latitude_i / 1e7 if latitude_i else None
+                        longitude = longitude_i / 1e7 if longitude_i else None
     
                         # Calculate precision in meters from precision_bits
                         # Based on Meshtastic documentation: https://meshtastic.org/docs/configuration/radio/channels/#position-precision
@@ -3757,6 +3770,7 @@ class LocationRepository:
                                 "precision_bits": precision_bits,
                                 "precision_meters": precision_meters,
                                 "sats_in_view": sats_in_view,
+                                "position_precision": position_precision,
                             }
                         )
                     except Exception as e:
