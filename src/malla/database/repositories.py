@@ -3597,6 +3597,7 @@ class LocationRepository:
                     WITH ranked_positions AS (
                         SELECT
                             ph.from_node_id as node_id,
+                            ph.portnum,
                             ph.timestamp,
                             ph.raw_payload,
                             row_number() OVER (
@@ -3614,6 +3615,7 @@ class LocationRepository:
                     )
                     SELECT
                         rp.node_id,
+                        rp.portnum,
                         rp.timestamp,
                         rp.raw_payload,
                         rp.row_num,
