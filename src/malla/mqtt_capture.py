@@ -119,6 +119,9 @@ IGNORE_MALFORMED_PACKETS: bool = _cfg.ignore_malformed_packets
 
 # Data retention settings
 DATA_RETENTION_HOURS: int = _cfg.data_retention_hours
+TELEMETRY_MIN_RETENTION_HOURS: int = max(
+    0, int(getattr(_cfg, "telemetry_min_retention_hours", 720))
+)
 DATA_CLEANUP_INTERVAL_SECONDS: int = max(
     60, int(getattr(_cfg, "data_cleanup_interval_seconds", 3600))
 )
@@ -897,13 +900,20 @@ def get_packet_history(
 
 def cleanup_old_data() -> None:
     """Clean up old data from the database based on retention settings."""
-    if DATA_RETENTION_HOURS <= 0:
+    if DATA_RETENTION_HOURS <= 0 and TELEMETRY_MIN_RETENTION_HOURS <= 0:
         logging.debug("Data cleanup disabled (retention hours set to 0)")
         return
 
-    logging.info(f"Data cleanup started for retention hours: {DATA_RETENTION_HOURS}")
+    logging.info(
+        "Data cleanup started (retention=%sh, telemetry_min_retention=%sh)",
+        DATA_RETENTION_HOURS,
+        TELEMETRY_MIN_RETENTION_HOURS,
+    )
     current_time = time.time()
-    cutoff_time = current_time - (DATA_RETENTION_HOURS * 3600)
+    cutoff_time = current_time - (max(0, DATA_RETENTION_HOURS) * 3600)
+    telemetry_cutoff_time = current_time - (
+        max(0, DATA_RETENTION_HOURS, TELEMETRY_MIN_RETENTION_HOURS) * 3600
+    )
 
     packets_deleted = 0
     nodes_deleted = 0
@@ -914,66 +924,72 @@ def cleanup_old_data() -> None:
 
         try:
             # Delete old packet history records in small batches to avoid long locks
-            while True:
-                cursor.execute(
-                    """
-                    DELETE FROM packet_history
-                    WHERE ctid IN (
-                        SELECT ctid FROM packet_history
-                        WHERE timestamp < %s
-                        ORDER BY timestamp ASC
-                        LIMIT 5000
+            if DATA_RETENTION_HOURS > 0:
+                while True:
+                    cursor.execute(
+                        """
+                        DELETE FROM packet_history
+                        WHERE ctid IN (
+                            SELECT ctid FROM packet_history
+                            WHERE timestamp < %s
+                              AND (
+                                  portnum_name IS DISTINCT FROM 'TELEMETRY_APP'
+                                  OR timestamp < %s
+                              )
+                            ORDER BY timestamp ASC
+                            LIMIT 5000
+                        )
+                        """,
+                        (cutoff_time, telemetry_cutoff_time),
                     )
-                    """,
-                    (cutoff_time,),
-                )
-                batch_deleted = cursor.rowcount
-                packets_deleted += batch_deleted
-                conn.commit()
-                if batch_deleted < 5000:
-                    break
+                    batch_deleted = cursor.rowcount
+                    packets_deleted += batch_deleted
+                    conn.commit()
+                    if batch_deleted < 5000:
+                        break
 
             # Delete node_info records for nodes that haven't been seen recently
             # and have no packets in the packet_history table
-            while True:
-                # Each batch runs in its own transaction and locks tables in
-                # packet_history -> node_info order to avoid deadlocks with
-                # get_available_from_nodes() in src/malla/database/repositories.py.
-                cursor.execute("BEGIN")
-                cursor.execute("LOCK TABLE packet_history IN SHARE MODE")
-                cursor.execute("LOCK TABLE node_info IN SHARE MODE")
-                cursor.execute(
-                    """
-                    SELECT DISTINCT node_id
-                    FROM (
-                        SELECT from_node_id AS node_id
-                        FROM packet_history
-                        WHERE from_node_id IS NOT NULL
-                        UNION
-                        SELECT to_node_id AS node_id
-                        FROM packet_history
-                        WHERE to_node_id IS NOT NULL
-                    ) AS packet_nodes
-                    """
-                )
-                packet_node_ids = [row["node_id"] for row in cursor.fetchall()]
-                cursor.execute(
-                    """
-                    DELETE FROM node_info
-                    WHERE ctid IN (
-                        SELECT ctid FROM node_info
-                        WHERE last_updated < %s
-                        AND NOT (node_id = ANY(%s))
-                        LIMIT 1000
+            if DATA_RETENTION_HOURS > 0:
+                while True:
+                    # Each batch runs in its own transaction and locks tables in
+                    # packet_history -> node_info order to avoid deadlocks with
+                    # get_available_from_nodes() in src/malla/database/repositories.py.
+                    cursor.execute("BEGIN")
+                    cursor.execute("LOCK TABLE packet_history IN SHARE MODE")
+                    cursor.execute("LOCK TABLE node_info IN SHARE MODE")
+                    cursor.execute(
+                        """
+                        SELECT DISTINCT node_id
+                        FROM (
+                            SELECT from_node_id AS node_id
+                            FROM packet_history
+                            WHERE from_node_id IS NOT NULL
+                            UNION
+                            SELECT to_node_id AS node_id
+                            FROM packet_history
+                            WHERE to_node_id IS NOT NULL
+                        ) AS packet_nodes
+                        """
                     )
-                    """,
-                    (cutoff_time, packet_node_ids),
-                )
-                batch_nodes_deleted = cursor.rowcount
-                nodes_deleted += batch_nodes_deleted
-                conn.commit()
-                if batch_nodes_deleted < 1000:
-                    break
+                    packet_node_ids = [row["node_id"] for row in cursor.fetchall()]
+                    cursor.execute(
+                        """
+                        DELETE FROM node_info
+                        WHERE ctid IN (
+                            SELECT ctid FROM node_info
+                            WHERE last_updated < %s
+                            AND NOT (node_id = ANY(%s))
+                            LIMIT 1000
+                        )
+                        """,
+                        (cutoff_time, packet_node_ids),
+                    )
+                    batch_nodes_deleted = cursor.rowcount
+                    nodes_deleted += batch_nodes_deleted
+                    conn.commit()
+                    if batch_nodes_deleted < 1000:
+                        break
 
             # Delete old telemetry records
             telemetry_deleted = 0
@@ -982,7 +998,7 @@ def cleanup_old_data() -> None:
                 DELETE FROM node_telemetry_latest
                 WHERE last_updated < to_timestamp(%s)
                 """,
-                (cutoff_time,),
+                (telemetry_cutoff_time,),
             )
             telemetry_deleted = cursor.rowcount
             conn.commit()

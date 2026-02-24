@@ -79,6 +79,9 @@ class AppConfig:
     # Data cleanup settings
     # Number of hours after which to delete old data (0 = never delete)
     data_retention_hours: int = 0
+    # Keep telemetry packets for at least this many hours even if
+    # data_retention_hours is shorter.
+    telemetry_min_retention_hours: int = 720
     # Cleanup interval in seconds (default: 1 hour)
     data_cleanup_interval_seconds: int = 3600
 

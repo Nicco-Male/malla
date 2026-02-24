@@ -43,3 +43,14 @@ def test_env_override(monkeypatch):
 
     assert cfg.name == "EnvName"
     assert cfg.debug is True
+
+
+def test_telemetry_min_retention_env_override(monkeypatch):
+    """Telemetry minimum retention can be set from environment."""
+
+    _clear_config_cache()
+
+    monkeypatch.setenv("MALLA_TELEMETRY_MIN_RETENTION_HOURS", "1440")
+    cfg = load_config(config_path=None)
+
+    assert cfg.telemetry_min_retention_hours == 1440
