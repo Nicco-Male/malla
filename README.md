@@ -130,7 +130,8 @@ Configuration is loaded in this order: defaults -> `config.yaml` (or `MALLA_CONF
 | `mqtt_username` / `mqtt_password` | `MALLA_MQTT_USERNAME` / `MALLA_MQTT_PASSWORD` | `None` | Optional MQTT auth |
 | `mqtt_topic_prefix` / `mqtt_topic_suffix` | `MALLA_MQTT_TOPIC_PREFIX` / `MALLA_MQTT_TOPIC_SUFFIX` | `"msh"` / `"/+/+/+/#"` | Topic selection |
 | `default_channel_key` | `MALLA_DEFAULT_CHANNEL_KEY` | `"1PG7OiApB1nwvP+rz05pAQ=="` | Comma-separated base64 keys for decrypting secondary channels |
-| `data_retention_hours` | `MALLA_DATA_RETENTION_HOURS` | `0` | Prune packets/nodes older than N hours (0 disables) |
+| `data_retention_hours` | `MALLA_DATA_RETENTION_HOURS` | `0` | Prune packets/nodes older than N hours (0 disables packet/node cleanup) |
+| `telemetry_min_retention_hours` | `MALLA_TELEMETRY_MIN_RETENTION_HOURS` | `720` | Keep TELEMETRY_APP data for at least N hours even when data retention is shorter |
 | `log_level` | `MALLA_LOG_LEVEL` | `"INFO"` | Capture service log level |
 | `otlp_endpoint` | `MALLA_OTLP_ENDPOINT` | `None` | Enable OTLP tracing/metrics export |
 
@@ -140,6 +141,8 @@ Notes:
 
 ## Data Retention
 Set `data_retention_hours` to automatically delete packet_history rows older than N hours and stale node_info entries with no recent packets. Defaults to `0` (no deletion). Cleanup runs hourly in the capture process.
+
+Telemetry history has an independent floor via `telemetry_min_retention_hours` (default `720`, i.e. 30 days): TELEMETRY_APP packets and `node_telemetry_latest` rows are preserved at least that long.
 
 ## Testing
 
