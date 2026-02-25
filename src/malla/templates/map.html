@@ -179,7 +179,8 @@ controls_section, stats_section, legend_section, sidebar_styles %}
             <option value="3">3 hops</option>
             <option value="4">4 hops</option>
             <option value="5">5 hops</option>
-            <option value="999">All</option>
+            <option value="6">6 hops</option>
+            <option value="7">7 hops</option>
         </select>
     </div>
 
@@ -1902,7 +1903,7 @@ controls_section, stats_section, legend_section, sidebar_styles %}
         }
 
         // Determine visible nodes
-        const visibleNodesSet = (currentHopDepth >= 999) ? new Set(nodeData.map(n => n.node_id)) : computeNodesWithinHops(selectedNodeId, currentHopDepth);
+        const visibleNodesSet = computeNodesWithinHops(selectedNodeId, currentHopDepth);
         visibleNodesSet.add(selectedNodeId); // ensure selected node visible
 
         // Backup full dataset
