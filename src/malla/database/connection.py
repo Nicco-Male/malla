@@ -225,7 +225,9 @@ def _ensure_tables(cursor: Any) -> None:
             tx_after INTEGER,
             message_type TEXT,
             raw_service_envelope BYTEA,
-            parsing_error TEXT
+            parsing_error TEXT,
+            channel_utilization DOUBLE PRECISION,
+            air_util_tx DOUBLE PRECISION
         )
         """
     )
@@ -262,6 +264,7 @@ def _ensure_schema_migrations(cursor: Any) -> None:
         "packet_indexes": _migration_packet_indexes,
         "cached_longest_links": _migration_cached_longest_links,
         "node_telemetry_latest": _migration_node_telemetry_latest,
+        "packet_airtime_metrics": _migration_packet_airtime_metrics,
     }
 
     for name, func in migrations.items():
@@ -441,5 +444,28 @@ def _migration_node_telemetry_latest(cursor: Any) -> None:
         """
         CREATE INDEX IF NOT EXISTS idx_node_telemetry_latest_updated
         ON node_telemetry_latest(last_updated DESC)
+        """
+    )
+
+
+def _migration_packet_airtime_metrics(cursor: Any) -> None:
+    """Ensure packet_history has persisted telemetry utilization fields."""
+    cursor.execute(
+        """
+        ALTER TABLE packet_history
+        ADD COLUMN IF NOT EXISTS channel_utilization DOUBLE PRECISION
+        """
+    )
+    cursor.execute(
+        """
+        ALTER TABLE packet_history
+        ADD COLUMN IF NOT EXISTS air_util_tx DOUBLE PRECISION
+        """
+    )
+    cursor.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_packet_history_airtime_stats
+        ON packet_history(timestamp, gateway_id, from_node_id)
+        WHERE channel_utilization IS NOT NULL OR air_util_tx IS NOT NULL
         """
     )
