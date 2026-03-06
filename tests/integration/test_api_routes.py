@@ -108,3 +108,25 @@ class TestAPIRoutes:
         assert response.status_code == 200
         data = response.get_json()
         assert data["filters"]["include_indirect"] is True
+
+    @pytest.mark.integration
+    def test_api_top_airtime_nodes_6h_endpoint(self, client):
+        """Test windowed airtime endpoint returns expected envelope."""
+        response = client.get("/api/stats/top-airtime-nodes-6h?hours=6&bucket_minutes=60")
+        assert response.status_code == 200
+
+        data = response.get_json()
+        assert data["hours"] == 6
+        assert data["bucket_minutes"] == 60
+        assert "mode" in data
+        assert "nodes" in data
+        assert isinstance(data["nodes"], list)
+
+    @pytest.mark.integration
+    def test_api_top_airtime_nodes_6h_hours_validation(self, client):
+        """Test windowed airtime endpoint validates hours whitelist."""
+        response = client.get("/api/stats/top-airtime-nodes-6h?hours=3")
+        assert response.status_code == 400
+
+        data = response.get_json()
+        assert "error" in data

@@ -10,12 +10,11 @@
                 <i class="bi bi-bar-chart-fill me-2 text-primary"></i>Network Statistics
             </h1>
             <div class="d-flex align-items-center gap-2">
-                <label for="timeRange" class="text-muted small mb-0">Time Range:</label>
+                <label for="timeRange" class="text-muted small mb-0">Finestra media:</label>
                 <select class="form-select form-select-sm" id="timeRange" style="width: auto;">
-                    <option value="1">Last 1 Hour</option>
-                    <option value="6">Last 6 Hours</option>
-                    <option value="24" selected>Last 24 Hours</option>
-                    <option value="168">Last 7 Days</option>
+                    <option value="6" selected>Media 6h</option>
+                    <option value="12">Media 12h</option>
+                    <option value="24">Media 24h</option>
                 </select>
             </div>
         </div>
@@ -427,6 +426,43 @@
     </div>
 </div>
 
+
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card shadow-sm glass-panel">
+            <div class="card-header bg-transparent border-0 d-flex justify-content-between align-items-center">
+                <div>
+                    <h5 class="mb-0 card-title"><i class="bi bi-wifi me-2"></i>Top Airtime Nodes — Media 6h</h5>
+                    <small class="text-muted">Ranking per media nei bucket temporali (1h) della finestra selezionata</small>
+                </div>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0" id="topAirtimeAveragesTable">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Node</th>
+                                <th class="text-end">Media CH%</th>
+                                <th class="text-end">Mediana CH%</th>
+                                <th class="text-end">Max CH%</th>
+                                <th class="text-end">Media AirTX%</th>
+                                <th class="text-end">Mediana AirTX%</th>
+                                <th class="text-end">Max AirTX%</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td colspan="7" class="text-center py-4">
+                                    <div class="spinner-border text-primary" role="status"></div>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
 <!-- Unique Statistics Section - Not on Dashboard -->
 <div class="row mb-4" id="advancedNetworkAnalytics">
     <div class="col-12">
@@ -497,7 +533,7 @@
 <script src="https://cdn.jsdelivr.net/npm/moment@2.30.1/moment.min.js"></script>
 <script>
     (() => {
-        let currentHours = 24;
+        let currentHours = 6;
         const chartInstances = {};
         const computedStyle = getComputedStyle(document.documentElement);
         const palette = {
@@ -554,10 +590,11 @@
                     fetch(`/gateway/api/gateways/status${hoursParam}`),
                     fetch(`/api/stats/hop-distribution${hoursParam}`),
                     fetch(`/api/stats/hardware-models${hoursParam}`),
-                    fetch(`/api/stats/peak-hours${hoursParam}`)
+                    fetch(`/api/stats/peak-hours${hoursParam}`),
+                    fetch(`/api/stats/top-airtime-nodes-6h${hoursParam}`)
                 ]);
 
-                const names = ['hottest', 'coldest', 'utilization', 'packet types', 'channels', 'network health', 'node naming', 'highlighted nodes', 'gateways', 'signal quality', 'signal quality nodes', 'delivery', 'battery', 'humidity', 'voltage', 'top channel utilizers', 'gateway status', 'hop distribution', 'hardware models', 'peak hours'];
+                const names = ['hottest', 'coldest', 'utilization', 'packet types', 'channels', 'network health', 'node naming', 'highlighted nodes', 'gateways', 'signal quality', 'signal quality nodes', 'delivery', 'battery', 'humidity', 'voltage', 'top channel utilizers', 'gateway status', 'hop distribution', 'hardware models', 'peak hours', 'top airtime averages'];
                 const [
                     hottestData,
                     coldestData,
@@ -578,7 +615,8 @@
                     gatewayStatusData,
                     hopDistributionData,
                     hardwareModelsData,
-                    peakHoursData
+                    peakHoursData,
+                    topAirtimeAveragesData
                 ] = await Promise.all(responses.map(async (r, idx) => {
                     if (!r.ok) {
                         const message = `HTTP ${r.status} ${r.statusText}`;
@@ -704,6 +742,12 @@
                     renderPeakHoursChart(peakHoursData || {});
                 }
 
+                if (topAirtimeAveragesData && topAirtimeAveragesData.error) {
+                    showError('topAirtimeAveragesTable', topAirtimeAveragesData.error);
+                } else {
+                    renderTopAirtimeAveragesTable('topAirtimeAveragesTable', topAirtimeAveragesData?.nodes || []);
+                }
+
                 // Handle telemetry data (arrays, not objects)
                 if (Array.isArray(batteryData)) {
                     renderTelemetryChart('batteryChart', batteryData, 'Battery Level', '%', '#28a745');
@@ -747,7 +791,8 @@
                     'gatewayStatusTable',
                     'hopDistributionChart',
                     'hardwareModelsChart',
-                    'peakHoursChart'
+                    'peakHoursChart',
+                    'topAirtimeAveragesTable'
                 ].forEach(id => showError(id, 'Failed to load data. Please refresh the page.'));
             }
         }
@@ -1679,6 +1724,42 @@
                 </td>
             `;
 
+                tbody.appendChild(tr);
+            });
+        }
+
+        
+        function renderTopAirtimeAveragesTable(tableId, nodes) {
+            const table = document.getElementById(tableId);
+            if (!table) return;
+            const tbody = table.querySelector('tbody');
+            if (!tbody) return;
+
+            tbody.innerHTML = '';
+
+            if (!nodes || nodes.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="7" class="text-center py-4 text-muted">No data available</td></tr>';
+                return;
+            }
+
+            const f = (value) => (value === null || value === undefined ? '—' : Number(value).toFixed(2));
+
+            nodes.forEach(node => {
+                const tr = document.createElement('tr');
+                const displayName = node.display_name || node.long_name || node.short_name || `Node ${node.node_id || 'Unknown'}`;
+                const nodeId = node.node_id || '';
+                tr.innerHTML = `
+                <td>
+                    <a href="/node/${nodeId}" class="text-decoration-none text-body fw-semibold">${displayName}</a>
+                    <div class="small text-muted">${node.hw_model || 'Unknown Node'} • ${node.bucket_count || 0} bucket</div>
+                </td>
+                <td class="text-end">${f(node.period_avg_channel_utilization)}</td>
+                <td class="text-end">${f(node.period_median_channel_utilization)}</td>
+                <td class="text-end">${f(node.period_max_channel_utilization)}</td>
+                <td class="text-end">${f(node.period_avg_air_util_tx)}</td>
+                <td class="text-end">${f(node.period_median_air_util_tx)}</td>
+                <td class="text-end">${f(node.period_max_air_util_tx)}</td>
+                `;
                 tbody.appendChild(tr);
             });
         }
