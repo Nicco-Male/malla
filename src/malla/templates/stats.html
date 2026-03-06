@@ -398,8 +398,8 @@
         <div class="card shadow-sm h-100 glass-panel">
             <div class="card-header bg-transparent border-0 d-flex justify-content-between align-items-center">
                 <div>
-                    <h5 class="mb-0 card-title"><i class="bi bi-list-ol me-2"></i>Top Channel Utilizers</h5>
-                    <small class="text-muted">Nodes sending the most packets across channels</small>
+                    <h5 class="mb-0 card-title"><i class="bi bi-list-ol me-2"></i>Top Packet/Channel Activity</h5>
+                    <small class="text-muted">Ranking by packet volume and distinct channels per node</small>
                 </div>
             </div>
             <div class="card-body p-0">
@@ -432,8 +432,8 @@
         <div class="card shadow-sm glass-panel">
             <div class="card-header bg-transparent border-0 d-flex justify-content-between align-items-center">
                 <div>
-                    <h5 class="mb-0 card-title" id="topAirtimeAveragesTitle"><i class="bi bi-wifi me-2"></i>Top Node Utilization (CH% + AirTX%) — Media 6h</h5>
-                    <small class="text-muted" id="topAirtimeAveragesSubtitle">Ranking per media nei bucket temporali (1h) di channel_utilization e air_util_tx</small>
+                    <h5 class="mb-0 card-title" id="topAirtimeAveragesTitle"><i class="bi bi-wifi me-2"></i>Top Telemetry Utilization (CH% + AirTX%) — Media 6h</h5>
+                    <small class="text-muted" id="topAirtimeAveragesSubtitle">Ranking telemetry per media nei bucket temporali (1h) di channel_utilization e air_util_tx</small>
                 </div>
             </div>
             <div class="card-body p-0">
@@ -574,8 +574,8 @@
             const subtitle = document.getElementById('topAirtimeAveragesSubtitle');
             if (!title || !subtitle) return;
 
-            title.innerHTML = `<i class="bi bi-wifi me-2"></i>Top Node Utilization (CH% + AirTX%) — Media ${currentHours}h`;
-            subtitle.textContent = `Ranking per media nei bucket temporali (1h) di channel_utilization e air_util_tx (${currentHours}h)`;
+            title.innerHTML = `<i class="bi bi-wifi me-2"></i>Top Telemetry Utilization (CH% + AirTX%) — Media ${currentHours}h`;
+            subtitle.textContent = `Ranking telemetry per media nei bucket temporali (1h) di channel_utilization e air_util_tx (${currentHours}h)`;
         }
 
         async function loadStats() {
