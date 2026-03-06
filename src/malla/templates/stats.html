@@ -432,22 +432,22 @@
         <div class="card shadow-sm glass-panel">
             <div class="card-header bg-transparent border-0 d-flex justify-content-between align-items-center">
                 <div>
-                    <h5 class="mb-0 card-title"><i class="bi bi-wifi me-2"></i>Top Airtime Nodes — Media 6h</h5>
-                    <small class="text-muted">Ranking per media nei bucket temporali (1h) della finestra selezionata</small>
+                    <h5 class="mb-0 card-title" id="topAirtimeAveragesTitle"><i class="bi bi-wifi me-2"></i>Top Node Utilization (CH% + AirTX%) — Media 6h</h5>
+                    <small class="text-muted" id="topAirtimeAveragesSubtitle">Ranking per media nei bucket temporali (1h) di channel_utilization e air_util_tx</small>
                 </div>
             </div>
             <div class="card-body p-0">
                 <div class="table-responsive">
-                    <table class="table table-hover align-middle mb-0" id="topAirtimeAveragesTable">
+                    <table class="table table-hover align-middle mb-0 top-airtime-table" id="topAirtimeAveragesTable">
                         <thead class="table-light">
                             <tr>
                                 <th>Node</th>
                                 <th class="text-end">Media CH%</th>
-                                <th class="text-end">Mediana CH%</th>
-                                <th class="text-end">Max CH%</th>
+                                <th class="text-end d-none d-md-table-cell">Mediana CH%</th>
+                                <th class="text-end d-none d-lg-table-cell">Max CH%</th>
                                 <th class="text-end">Media AirTX%</th>
-                                <th class="text-end">Mediana AirTX%</th>
-                                <th class="text-end">Max AirTX%</th>
+                                <th class="text-end d-none d-md-table-cell">Mediana AirTX%</th>
+                                <th class="text-end d-none d-lg-table-cell">Max AirTX%</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -560,11 +560,23 @@
             if (timeRange) {
                 timeRange.addEventListener('change', function () {
                     currentHours = parseInt(this.value, 10);
+                    updateAirtimeAveragesHeading();
                     loadStats();
                 });
             }
+            updateAirtimeAveragesHeading();
             loadStats();
         });
+
+
+        function updateAirtimeAveragesHeading() {
+            const title = document.getElementById('topAirtimeAveragesTitle');
+            const subtitle = document.getElementById('topAirtimeAveragesSubtitle');
+            if (!title || !subtitle) return;
+
+            title.innerHTML = `<i class="bi bi-wifi me-2"></i>Top Node Utilization (CH% + AirTX%) — Media ${currentHours}h`;
+            subtitle.textContent = `Ranking per media nei bucket temporali (1h) di channel_utilization e air_util_tx (${currentHours}h)`;
+        }
 
         async function loadStats() {
             const hoursParam = `?hours=${currentHours}`;
@@ -1748,17 +1760,20 @@
                 const tr = document.createElement('tr');
                 const displayName = node.display_name || node.long_name || node.short_name || `Node ${node.node_id || 'Unknown'}`;
                 const nodeId = node.node_id || '';
+                const bucketCount = Number(node.bucket_count || 0);
+                const bucketLabel = bucketCount === 1 ? 'bucket' : 'buckets';
+
                 tr.innerHTML = `
                 <td>
                     <a href="/node/${nodeId}" class="text-decoration-none text-body fw-semibold">${displayName}</a>
-                    <div class="small text-muted">${node.hw_model || 'Unknown Node'} • ${node.bucket_count || 0} bucket</div>
+                    <div class="small text-muted">${node.hw_model || 'Unknown Node'} • ${bucketCount} ${bucketLabel}</div>
                 </td>
                 <td class="text-end">${f(node.period_avg_channel_utilization)}</td>
-                <td class="text-end">${f(node.period_median_channel_utilization)}</td>
-                <td class="text-end">${f(node.period_max_channel_utilization)}</td>
+                <td class="text-end d-none d-md-table-cell">${f(node.period_median_channel_utilization)}</td>
+                <td class="text-end d-none d-lg-table-cell">${f(node.period_max_channel_utilization)}</td>
                 <td class="text-end">${f(node.period_avg_air_util_tx)}</td>
-                <td class="text-end">${f(node.period_median_air_util_tx)}</td>
-                <td class="text-end">${f(node.period_max_air_util_tx)}</td>
+                <td class="text-end d-none d-md-table-cell">${f(node.period_median_air_util_tx)}</td>
+                <td class="text-end d-none d-lg-table-cell">${f(node.period_max_air_util_tx)}</td>
                 `;
                 tbody.appendChild(tr);
             });
@@ -2216,6 +2231,35 @@
         font-weight: bold;
         font-size: 0.8rem;
         text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+    }
+
+    @media (max-width: 767.98px) {
+        #topAirtimeAveragesTitle {
+            font-size: 1.1rem;
+            line-height: 1.25;
+        }
+
+        #topAirtimeAveragesSubtitle {
+            display: block;
+            margin-top: 0.25rem;
+            font-size: 0.85rem;
+            line-height: 1.35;
+        }
+
+        .top-airtime-table thead th {
+            font-size: 0.8rem;
+            white-space: nowrap;
+        }
+
+        .top-airtime-table tbody td {
+            font-size: 0.95rem;
+            padding: 0.6rem 0.55rem;
+            vertical-align: middle;
+        }
+
+        .top-airtime-table tbody td:first-child {
+            min-width: 210px;
+        }
     }
 </style>
 {% endblock %}
