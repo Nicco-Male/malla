@@ -436,6 +436,8 @@ def _migration_node_telemetry_latest(cursor: Any) -> None:
             pressure FLOAT,
             battery_level INTEGER,
             voltage FLOAT,
+            channel_utilization FLOAT,
+            air_util_tx FLOAT,
             last_updated TIMESTAMP NOT NULL DEFAULT NOW()
         )
         """
@@ -444,6 +446,19 @@ def _migration_node_telemetry_latest(cursor: Any) -> None:
         """
         CREATE INDEX IF NOT EXISTS idx_node_telemetry_latest_updated
         ON node_telemetry_latest(last_updated DESC)
+        """
+    )
+
+    cursor.execute(
+        """
+        ALTER TABLE node_telemetry_latest
+        ADD COLUMN IF NOT EXISTS channel_utilization FLOAT
+        """
+    )
+    cursor.execute(
+        """
+        ALTER TABLE node_telemetry_latest
+        ADD COLUMN IF NOT EXISTS air_util_tx FLOAT
         """
     )
 

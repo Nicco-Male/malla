@@ -1476,6 +1476,8 @@ def on_message(client: mqtt.Client, userdata: Any, msg: mqtt.MQTTMessage) -> Non
                 pressure_value = None
                 battery_level_value = None
                 voltage_value = None
+                channel_utilization_value = None
+                air_util_tx_value = None
 
                 if env_metrics:
                     if env_metrics.HasField("temperature"):
@@ -1495,6 +1497,12 @@ def on_message(client: mqtt.Client, userdata: Any, msg: mqtt.MQTTMessage) -> Non
                         voltage_value = normalize_voltage(
                             float(device_metrics.voltage)
                         )
+                    if device_metrics.HasField("channel_utilization"):
+                        channel_utilization_value = float(
+                            device_metrics.channel_utilization
+                        )
+                    if device_metrics.HasField("air_util_tx"):
+                        air_util_tx_value = float(device_metrics.air_util_tx)
 
                 conn = get_db_connection()
                 cursor = conn.cursor()
@@ -1508,15 +1516,17 @@ def on_message(client: mqtt.Client, userdata: Any, msg: mqtt.MQTTMessage) -> Non
                     """
                     INSERT INTO node_telemetry_latest (
                         node_id, temperature, humidity, pressure,
-                        battery_level, voltage, last_updated
+                        battery_level, voltage, channel_utilization, air_util_tx, last_updated
                     )
-                    VALUES (%s, %s, %s, %s, %s, %s, NOW())
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, NOW())
                     ON CONFLICT (node_id) DO UPDATE SET
                         temperature = COALESCE(EXCLUDED.temperature, node_telemetry_latest.temperature),
                         humidity = COALESCE(EXCLUDED.humidity, node_telemetry_latest.humidity),
                         pressure = COALESCE(EXCLUDED.pressure, node_telemetry_latest.pressure),
                         battery_level = COALESCE(EXCLUDED.battery_level, node_telemetry_latest.battery_level),
                         voltage = COALESCE(EXCLUDED.voltage, node_telemetry_latest.voltage),
+                        channel_utilization = COALESCE(EXCLUDED.channel_utilization, node_telemetry_latest.channel_utilization),
+                        air_util_tx = COALESCE(EXCLUDED.air_util_tx, node_telemetry_latest.air_util_tx),
                         last_updated = EXCLUDED.last_updated
                     """,
                     (
@@ -1526,6 +1536,8 @@ def on_message(client: mqtt.Client, userdata: Any, msg: mqtt.MQTTMessage) -> Non
                         pressure_value,
                         battery_level_value,
                         voltage_value,
+                        channel_utilization_value,
+                        air_util_tx_value,
                     ),
                 )
                 conn.commit()
