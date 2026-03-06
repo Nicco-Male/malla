@@ -395,32 +395,19 @@ def get_packet_type_nodes():
 
 
 @api_bp.route("/stats/top-channel-utilizers")
-@api_bp.route("/stats/top-airtime-nodes")
 def get_top_channel_utilizers():
-    """Get top nodes by telemetry channel/airtime utilization."""
+    """Get top nodes ranked by packet-level activity across channels."""
     try:
         gateway_id = request.args.get("gateway_id")
         hours = request.args.get("hours", 24, type=int)
         limit = request.args.get("limit", 15, type=int)
-        mode = request.args.get("mode", "combined", type=str).strip().lower()
 
         if hours is None or hours <= 0:
             return jsonify({"error": "hours must be a positive integer"}), 400
         if limit is None or limit <= 0:
             return jsonify({"error": "limit must be a positive integer"}), 400
-        if mode not in {"combined", "airtime", "channel"}:
-            return (
-                jsonify(
-                    {
-                        "error": "Invalid mode",
-                        "allowed_modes": ["combined", "airtime", "channel"],
-                    }
-                ),
-                400,
-            )
 
         limit = min(limit, 100)
-
         since = time.time() - (hours * 3600)
 
         conn = None
@@ -433,7 +420,6 @@ def get_top_channel_utilizers():
             where_conditions = [
                 "ph.timestamp >= %s",
                 "ph.from_node_id IS NOT NULL",
-                "(ph.channel_utilization IS NOT NULL OR ph.air_util_tx IS NOT NULL)",
             ]
             params: list[Any] = [since]
 
@@ -443,27 +429,6 @@ def get_top_channel_utilizers():
 
             where_clause = " AND ".join(where_conditions)
 
-            order_clause = """
-                avg_air_util_tx DESC NULLS LAST,
-                avg_channel_utilization DESC NULLS LAST,
-                packet_count DESC,
-                last_seen DESC NULLS LAST
-            """
-            if mode == "airtime":
-                order_clause = """
-                    avg_air_util_tx DESC NULLS LAST,
-                    avg_channel_utilization DESC NULLS LAST,
-                    packet_count DESC,
-                    last_seen DESC NULLS LAST
-                """
-            elif mode == "channel":
-                order_clause = """
-                    avg_channel_utilization DESC NULLS LAST,
-                    avg_air_util_tx DESC NULLS LAST,
-                    packet_count DESC,
-                    last_seen DESC NULLS LAST
-                """
-
             cursor.execute(
                 f"""
                 SELECT
@@ -471,8 +436,6 @@ def get_top_channel_utilizers():
                     MAX(ni.long_name) AS long_name,
                     MAX(ni.short_name) AS short_name,
                     MAX(ni.hw_model) AS hw_model,
-                    AVG(ph.channel_utilization::DOUBLE PRECISION) AS avg_channel_utilization,
-                    AVG(ph.air_util_tx::DOUBLE PRECISION) AS avg_air_util_tx,
                     COUNT(*) AS packet_count,
                     COUNT(DISTINCT ph.channel_id) FILTER (WHERE ph.channel_id IS NOT NULL) AS channel_count,
                     ARRAY_AGG(DISTINCT ph.channel_id ORDER BY ph.channel_id)
@@ -482,8 +445,7 @@ def get_top_channel_utilizers():
                 LEFT JOIN node_info ni ON ph.from_node_id = ni.node_id
                 WHERE {where_clause}
                 GROUP BY ph.from_node_id
-                HAVING COUNT(*) > 0
-                ORDER BY {order_clause}
+                ORDER BY packet_count DESC, channel_count DESC, last_seen DESC NULLS LAST
                 LIMIT %s
                 """,
                 [*params, limit],
@@ -503,8 +465,6 @@ def get_top_channel_utilizers():
                         "node_id": node_id,
                         "display_name": display_name,
                         "hw_model": row.get("hw_model"),
-                        "avg_channel_utilization": row.get("avg_channel_utilization"),
-                        "avg_air_util_tx": row.get("avg_air_util_tx"),
                         "packet_count": row.get("packet_count", 0) or 0,
                         "channel_count": row.get("channel_count", 0) or 0,
                         "channels": row.get("channels") or [],
@@ -524,7 +484,6 @@ def get_top_channel_utilizers():
                         pass
         return safe_jsonify(
             {
-                "mode": mode,
                 "hours": hours,
                 "gateway_id": gateway_id,
                 "nodes": nodes,
@@ -535,7 +494,7 @@ def get_top_channel_utilizers():
         return (
             jsonify(
                 {
-                    "error": "Failed to compute top airtime/channel utilizers",
+                    "error": "Failed to compute top packet/channel activity",
                     "message": str(e),
                 }
             ),
