@@ -781,6 +781,27 @@ def log_packet_to_database(
     relay_node = getattr(mesh_packet, "relay_node", None) if mesh_packet else None
     tx_after = getattr(mesh_packet, "tx_after", None) if mesh_packet else None
 
+    channel_utilization = None
+    air_util_tx = None
+    if (
+        mesh_packet
+        and hasattr(mesh_packet, "decoded")
+        and portnum == portnums_pb2.PortNum.TELEMETRY_APP
+        and hasattr(mesh_packet.decoded, "payload")
+    ):
+        try:
+            telemetry_data = telemetry_pb2.Telemetry()
+            telemetry_data.ParseFromString(mesh_packet.decoded.payload)
+            if telemetry_data.HasField("device_metrics"):
+                device_metrics = telemetry_data.device_metrics
+                if device_metrics.HasField("channel_utilization"):
+                    channel_utilization = float(device_metrics.channel_utilization)
+                if device_metrics.HasField("air_util_tx"):
+                    air_util_tx = float(device_metrics.air_util_tx)
+        except Exception:
+            # Ignore telemetry decode failures for packet_history persistence
+            pass
+
     # Removed db_lock - ThreadedConnectionPool is thread-safe and serialization
     # was causing connection pool exhaustion under high message rates
     conn = get_db_connection()
@@ -805,8 +826,8 @@ def log_packet_to_database(
                  gateway_id, channel_id, mesh_packet_id, rssi, snr, hop_limit, hop_start, payload_length,
                  raw_payload, processed_successfully, via_mqtt, want_ack, priority, delayed,
                  channel_index, rx_time, pki_encrypted, next_hop, relay_node, tx_after,
-                 message_type, raw_service_envelope, parsing_error)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                 message_type, raw_service_envelope, parsing_error, channel_utilization, air_util_tx)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             """,
                 (
                     current_time,
@@ -838,6 +859,8 @@ def log_packet_to_database(
                     message_type,
                     raw_service_envelope_data,
                     parsing_error,
+                    channel_utilization,
+                    air_util_tx,
                 ),
             )
 
