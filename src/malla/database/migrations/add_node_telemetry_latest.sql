@@ -9,8 +9,16 @@ CREATE TABLE IF NOT EXISTS node_telemetry_latest (
     pressure FLOAT,
     battery_level INTEGER,
     voltage FLOAT,
+    channel_utilization FLOAT,
+    air_util_tx FLOAT,
     last_updated TIMESTAMP NOT NULL DEFAULT NOW()
 );
+
+ALTER TABLE node_telemetry_latest
+ADD COLUMN IF NOT EXISTS channel_utilization FLOAT;
+
+ALTER TABLE node_telemetry_latest
+ADD COLUMN IF NOT EXISTS air_util_tx FLOAT;
 
 CREATE INDEX IF NOT EXISTS idx_node_telemetry_latest_updated
 ON node_telemetry_latest(last_updated DESC);
