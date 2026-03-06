@@ -437,7 +437,7 @@
                 </div>
             </div>
             <div class="card-body p-0">
-                <div class="table-responsive stats-table-scroll">
+                <div class="table-responsive stats-table-scroll-mobile-fit">
                     <table class="table table-hover align-middle mb-0 top-airtime-table" id="topAirtimeAveragesTable">
                         <thead class="table-light">
                             <tr>
@@ -2261,6 +2261,10 @@
         min-width: 900px;
     }
 
+    .stats-table-scroll-mobile-fit {
+        overflow-x: auto;
+    }
+
     @media (max-width: 767.98px) {
         .stats-table-scroll {
             border-left: 0;
@@ -2284,19 +2288,54 @@
             line-height: 1.35;
         }
 
+        .top-airtime-table {
+            width: 100% !important;
+            min-width: 0 !important;
+            table-layout: fixed;
+        }
+
         .top-airtime-table thead th {
             font-size: 0.8rem;
             white-space: nowrap;
         }
 
+        .top-airtime-table th:nth-child(1),
+        .top-airtime-table td:nth-child(1) {
+            width: 58%;
+        }
+
+        .top-airtime-table th:nth-child(2),
+        .top-airtime-table td:nth-child(2),
+        .top-airtime-table th:nth-child(5),
+        .top-airtime-table td:nth-child(5) {
+            width: 21%;
+        }
+
         .top-airtime-table tbody td {
-            font-size: 0.95rem;
-            padding: 0.6rem 0.55rem;
+            font-size: 0.9rem;
+            padding: 0.55rem 0.45rem;
             vertical-align: middle;
         }
 
         .top-airtime-table tbody td:first-child {
-            min-width: 210px;
+            min-width: 0;
+        }
+
+        .top-airtime-table tbody td:first-child a {
+            display: block;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .top-airtime-table tbody td:first-child .small {
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        #topAirtimeAveragesTable {
+            min-width: 0;
         }
 
         #topAirtimeAveragesTable {
