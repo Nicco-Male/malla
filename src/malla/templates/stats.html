@@ -724,6 +724,8 @@
 
                 if (Array.isArray(topChannelUtilizersData)) {
                     renderTopChannelUtilizersTable('topChannelUtilizersTable', topChannelUtilizersData);
+                } else if (topChannelUtilizersData && Array.isArray(topChannelUtilizersData.nodes)) {
+                    renderTopChannelUtilizersTable('topChannelUtilizersTable', topChannelUtilizersData.nodes);
                 } else if (topChannelUtilizersData && topChannelUtilizersData.error) {
                     showError('topChannelUtilizersTable', topChannelUtilizersData.error);
                 } else {
