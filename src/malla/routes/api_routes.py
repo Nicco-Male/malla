@@ -538,6 +538,211 @@ def get_top_channel_utilizers():
         )
 
 
+@api_bp.route("/stats/top-airtime-nodes-6h")
+def get_top_airtime_nodes_windowed():
+    """Get top nodes ranked by average airtime/channel utilization over temporal buckets."""
+    try:
+        gateway_id = request.args.get("gateway_id")
+        hours = request.args.get("hours", 6, type=int)
+        limit = request.args.get("limit", 15, type=int)
+        bucket_minutes = request.args.get("bucket_minutes", 60, type=int)
+        mode = request.args.get("mode", "airtime", type=str).strip().lower()
+
+        if hours not in {6, 12, 24}:
+            return jsonify({"error": "hours must be one of: 6, 12, 24"}), 400
+        if limit is None or limit <= 0:
+            return jsonify({"error": "limit must be a positive integer"}), 400
+        if bucket_minutes is None or bucket_minutes <= 0:
+            return jsonify({"error": "bucket_minutes must be a positive integer"}), 400
+        if mode not in {"combined", "airtime", "channel"}:
+            return (
+                jsonify(
+                    {
+                        "error": "Invalid mode",
+                        "allowed_modes": ["combined", "airtime", "channel"],
+                    }
+                ),
+                400,
+            )
+
+        limit = min(limit, 100)
+        bucket_seconds = bucket_minutes * 60
+        since = time.time() - (hours * 3600)
+
+        conn = None
+        cursor = None
+        try:
+            conn = get_db_connection()
+            conn.autocommit = True
+            cursor = conn.cursor(cursor_factory=RealDictCursor)
+
+            where_conditions = [
+                "ph.timestamp >= %s",
+                "ph.from_node_id IS NOT NULL",
+                "(ph.channel_utilization IS NOT NULL OR ph.air_util_tx IS NOT NULL)",
+            ]
+            params: list[Any] = [since]
+
+            if gateway_id:
+                where_conditions.append("ph.gateway_id = %s")
+                params.append(gateway_id)
+
+            where_clause = " AND ".join(where_conditions)
+            order_clause = "period_avg_air_util_tx DESC NULLS LAST"
+            if mode == "channel":
+                order_clause = "period_avg_channel_utilization DESC NULLS LAST"
+            elif mode == "combined":
+                order_clause = "combined_period_avg DESC NULLS LAST"
+
+            cursor.execute(
+                f"""
+                WITH bucketed AS (
+                    SELECT
+                        ph.from_node_id AS node_id,
+                        (FLOOR(ph.timestamp / %s) * %s)::BIGINT AS bucket_ts,
+                        AVG(ph.channel_utilization::DOUBLE PRECISION) FILTER (WHERE ph.channel_utilization IS NOT NULL) AS bucket_avg_channel_utilization,
+                        PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY ph.channel_utilization::DOUBLE PRECISION)
+                            FILTER (WHERE ph.channel_utilization IS NOT NULL) AS bucket_median_channel_utilization,
+                        MAX(ph.channel_utilization::DOUBLE PRECISION) FILTER (WHERE ph.channel_utilization IS NOT NULL) AS bucket_max_channel_utilization,
+                        AVG(ph.air_util_tx::DOUBLE PRECISION) FILTER (WHERE ph.air_util_tx IS NOT NULL) AS bucket_avg_air_util_tx,
+                        PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY ph.air_util_tx::DOUBLE PRECISION)
+                            FILTER (WHERE ph.air_util_tx IS NOT NULL) AS bucket_median_air_util_tx,
+                        MAX(ph.air_util_tx::DOUBLE PRECISION) FILTER (WHERE ph.air_util_tx IS NOT NULL) AS bucket_max_air_util_tx,
+                        COUNT(*) AS bucket_samples
+                    FROM packet_history ph
+                    WHERE {where_clause}
+                    GROUP BY ph.from_node_id, bucket_ts
+                ),
+                per_node AS (
+                    SELECT
+                        b.node_id,
+                        AVG(b.bucket_avg_channel_utilization) AS period_avg_channel_utilization,
+                        AVG(b.bucket_median_channel_utilization) AS period_median_channel_utilization,
+                        MAX(b.bucket_max_channel_utilization) AS period_max_channel_utilization,
+                        AVG(b.bucket_avg_air_util_tx) AS period_avg_air_util_tx,
+                        AVG(b.bucket_median_air_util_tx) AS period_median_air_util_tx,
+                        MAX(b.bucket_max_air_util_tx) AS period_max_air_util_tx,
+                        AVG((COALESCE(b.bucket_avg_channel_utilization, 0) + COALESCE(b.bucket_avg_air_util_tx, 0)) / 2.0) AS combined_period_avg,
+                        SUM(b.bucket_samples) AS total_samples,
+                        COUNT(*) AS bucket_count
+                    FROM bucketed b
+                    GROUP BY b.node_id
+                )
+                SELECT
+                    p.node_id,
+                    MAX(ni.long_name) AS long_name,
+                    MAX(ni.short_name) AS short_name,
+                    MAX(ni.hw_model) AS hw_model,
+                    p.period_avg_channel_utilization,
+                    p.period_median_channel_utilization,
+                    p.period_max_channel_utilization,
+                    p.period_avg_air_util_tx,
+                    p.period_median_air_util_tx,
+                    p.period_max_air_util_tx,
+                    p.combined_period_avg,
+                    p.total_samples,
+                    p.bucket_count,
+                    JSON_AGG(
+                        JSON_BUILD_OBJECT(
+                            'bucket_ts', b.bucket_ts,
+                            'avg_channel_utilization', b.bucket_avg_channel_utilization,
+                            'median_channel_utilization', b.bucket_median_channel_utilization,
+                            'max_channel_utilization', b.bucket_max_channel_utilization,
+                            'avg_air_util_tx', b.bucket_avg_air_util_tx,
+                            'median_air_util_tx', b.bucket_median_air_util_tx,
+                            'max_air_util_tx', b.bucket_max_air_util_tx,
+                            'samples', b.bucket_samples
+                        )
+                        ORDER BY b.bucket_ts DESC
+                    ) AS buckets
+                FROM per_node p
+                LEFT JOIN node_info ni ON p.node_id = ni.node_id
+                JOIN bucketed b ON p.node_id = b.node_id
+                GROUP BY
+                    p.node_id,
+                    p.period_avg_channel_utilization,
+                    p.period_median_channel_utilization,
+                    p.period_max_channel_utilization,
+                    p.period_avg_air_util_tx,
+                    p.period_median_air_util_tx,
+                    p.period_max_air_util_tx,
+                    p.combined_period_avg,
+                    p.total_samples,
+                    p.bucket_count
+                ORDER BY {order_clause}, p.total_samples DESC, p.node_id ASC
+                LIMIT %s
+                """,
+                [bucket_seconds, bucket_seconds, *params, limit],
+            )
+
+            rows = cursor.fetchall() or []
+            nodes = []
+            for row in rows:
+                node_id = row.get("node_id")
+                display_name = (
+                    row.get("long_name")
+                    or row.get("short_name")
+                    or (f"!{node_id:08x}" if node_id is not None else "Unknown")
+                )
+                nodes.append(
+                    {
+                        "node_id": node_id,
+                        "display_name": display_name,
+                        "hw_model": row.get("hw_model"),
+                        "period_avg_channel_utilization": row.get(
+                            "period_avg_channel_utilization"
+                        ),
+                        "period_median_channel_utilization": row.get(
+                            "period_median_channel_utilization"
+                        ),
+                        "period_max_channel_utilization": row.get(
+                            "period_max_channel_utilization"
+                        ),
+                        "period_avg_air_util_tx": row.get("period_avg_air_util_tx"),
+                        "period_median_air_util_tx": row.get(
+                            "period_median_air_util_tx"
+                        ),
+                        "period_max_air_util_tx": row.get("period_max_air_util_tx"),
+                        "combined_period_avg": row.get("combined_period_avg"),
+                        "total_samples": row.get("total_samples", 0) or 0,
+                        "bucket_count": row.get("bucket_count", 0) or 0,
+                        "buckets": row.get("buckets") or [],
+                    }
+                )
+        finally:
+            if cursor:
+                cursor.close()
+            if conn:
+                try:
+                    put_db_connection(conn)
+                except Exception:
+                    try:
+                        conn.close()
+                    except Exception:
+                        pass
+
+        return safe_jsonify(
+            {
+                "mode": mode,
+                "hours": hours,
+                "bucket_minutes": bucket_minutes,
+                "gateway_id": gateway_id,
+                "nodes": nodes,
+            }
+        )
+    except Exception as e:
+        logger.error(f"Error getting windowed top airtime nodes: {e}")
+        return (
+            jsonify(
+                {
+                    "error": "Failed to compute top airtime nodes for selected window",
+                    "message": str(e),
+                }
+            ),
+            500,
+        )
+
+
 @api_bp.route("/stats/channels")
 def get_channel_stats():
     """Get channel activity statistics."""
