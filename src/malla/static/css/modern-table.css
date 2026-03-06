@@ -58,6 +58,7 @@
 /* Modern table styling - COMPACT VERSION */
 .modern-table {
     width: 100%;
+    min-width: max-content;
     margin-bottom: 0;
     color: var(--bs-body-color);
     border-collapse: collapse;
@@ -478,6 +479,8 @@
     max-height: calc(100vh - 200px);
     /* Allow vertical scrolling */
     overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    touch-action: pan-x pan-y;
 }
 
 /* Ensure proper spacing for form controls */
