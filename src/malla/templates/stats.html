@@ -234,7 +234,7 @@
                 </div>
             </div>
             <div class="card-body p-0">
-                <div class="table-responsive">
+                <div class="table-responsive stats-table-scroll">
                     <table class="table table-hover align-middle mb-0" id="gatewayStatusTable">
                         <thead class="table-light">
                             <tr>
@@ -264,7 +264,7 @@
                 </div>
             </div>
             <div class="card-body p-0">
-                <div class="table-responsive">
+                <div class="table-responsive stats-table-scroll">
                     <table class="table table-hover align-middle mb-0" id="signalNodesTable">
                         <thead class="table-light">
                             <tr>
@@ -297,7 +297,7 @@
                 <small class="text-muted">Nodes with highest temperature telemetry</small>
             </div>
             <div class="card-body p-0">
-                <div class="table-responsive">
+                <div class="table-responsive stats-table-scroll">
                     <table class="table table-hover align-middle mb-0" id="hottestNodesTable">
                         <thead class="table-light">
                             <tr>
@@ -328,7 +328,7 @@
                 <small class="text-muted">Nodes with lowest temperature telemetry</small>
             </div>
             <div class="card-body p-0">
-                <div class="table-responsive">
+                <div class="table-responsive stats-table-scroll">
                     <table class="table table-hover align-middle mb-0" id="coldestNodesTable">
                         <thead class="table-light">
                             <tr>
@@ -371,7 +371,7 @@
                 </div>
             </div>
             <div class="card-body p-0">
-                <div class="table-responsive">
+                <div class="table-responsive stats-table-scroll">
                     <table class="table table-hover align-middle mb-0" id="highlightedNodesTable">
                         <thead class="table-light">
                             <tr>
@@ -403,7 +403,7 @@
                 </div>
             </div>
             <div class="card-body p-0">
-                <div class="table-responsive">
+                <div class="table-responsive stats-table-scroll">
                     <table class="table table-hover align-middle mb-0" id="topChannelUtilizersTable">
                         <thead class="table-light">
                             <tr>
@@ -437,7 +437,7 @@
                 </div>
             </div>
             <div class="card-body p-0">
-                <div class="table-responsive">
+                <div class="table-responsive stats-table-scroll-mobile-fit">
                     <table class="table table-hover align-middle mb-0 top-airtime-table" id="topAirtimeAveragesTable">
                         <thead class="table-light">
                             <tr>
@@ -2233,7 +2233,49 @@
         text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
     }
 
+    .stats-table-scroll {
+        overflow-x: auto;
+        overflow-y: hidden;
+        -webkit-overflow-scrolling: touch;
+        touch-action: pan-x pan-y;
+    }
+
+    .stats-table-scroll>table {
+        width: max-content;
+        min-width: 100%;
+    }
+
+    #gatewayStatusTable,
+    #hottestNodesTable,
+    #coldestNodesTable,
+    #topChannelUtilizersTable {
+        min-width: 700px;
+    }
+
+    #highlightedNodesTable,
+    #signalNodesTable {
+        min-width: 760px;
+    }
+
+    #topAirtimeAveragesTable {
+        min-width: 900px;
+    }
+
+    .stats-table-scroll-mobile-fit {
+        overflow-x: auto;
+    }
+
     @media (max-width: 767.98px) {
+        .stats-table-scroll {
+            border-left: 0;
+            border-right: 0;
+            border-radius: 0;
+        }
+
+        .stats-table-scroll>table {
+            min-width: 640px;
+        }
+
         #topAirtimeAveragesTitle {
             font-size: 1.1rem;
             line-height: 1.25;
@@ -2246,19 +2288,54 @@
             line-height: 1.35;
         }
 
+        .top-airtime-table {
+            width: 100% !important;
+            min-width: 0 !important;
+            table-layout: fixed;
+        }
+
         .top-airtime-table thead th {
             font-size: 0.8rem;
             white-space: nowrap;
         }
 
+        .top-airtime-table th:nth-child(1),
+        .top-airtime-table td:nth-child(1) {
+            width: 58%;
+        }
+
+        .top-airtime-table th:nth-child(2),
+        .top-airtime-table td:nth-child(2),
+        .top-airtime-table th:nth-child(5),
+        .top-airtime-table td:nth-child(5) {
+            width: 21%;
+        }
+
         .top-airtime-table tbody td {
-            font-size: 0.95rem;
-            padding: 0.6rem 0.55rem;
+            font-size: 0.9rem;
+            padding: 0.55rem 0.45rem;
             vertical-align: middle;
         }
 
         .top-airtime-table tbody td:first-child {
-            min-width: 210px;
+            min-width: 0;
+        }
+
+        .top-airtime-table tbody td:first-child a {
+            display: block;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .top-airtime-table tbody td:first-child .small {
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        #topAirtimeAveragesTable {
+            min-width: 0;
         }
     }
 </style>

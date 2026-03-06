@@ -203,6 +203,7 @@ body {
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   margin-bottom: 0.5rem;
+  overflow-wrap: anywhere;
 }
 
 .metric-label {
@@ -290,7 +291,21 @@ body {
 .table-responsive {
   border-radius: var(--bs-border-radius);
   border: 1px solid var(--bs-border-color);
-  overflow: hidden;
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+}
+
+@media (max-width: 768px) {
+  .metric-value {
+    font-size: 1.8rem;
+    line-height: 1.1;
+  }
+
+  .card-header,
+  .card-body {
+    padding: 1rem;
+  }
 }
 
 /* Buttons */
