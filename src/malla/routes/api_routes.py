@@ -446,21 +446,21 @@ def get_top_channel_utilizers():
             order_clause = """
                 avg_air_util_tx DESC NULLS LAST,
                 avg_channel_utilization DESC NULLS LAST,
-                samples DESC,
+                packet_count DESC,
                 last_seen DESC NULLS LAST
             """
             if mode == "airtime":
                 order_clause = """
                     avg_air_util_tx DESC NULLS LAST,
                     avg_channel_utilization DESC NULLS LAST,
-                    samples DESC,
+                    packet_count DESC,
                     last_seen DESC NULLS LAST
                 """
             elif mode == "channel":
                 order_clause = """
                     avg_channel_utilization DESC NULLS LAST,
                     avg_air_util_tx DESC NULLS LAST,
-                    samples DESC,
+                    packet_count DESC,
                     last_seen DESC NULLS LAST
                 """
 
@@ -473,7 +473,10 @@ def get_top_channel_utilizers():
                     MAX(ni.hw_model) AS hw_model,
                     AVG(ph.channel_utilization::DOUBLE PRECISION) AS avg_channel_utilization,
                     AVG(ph.air_util_tx::DOUBLE PRECISION) AS avg_air_util_tx,
-                    COUNT(*) AS samples,
+                    COUNT(*) AS packet_count,
+                    COUNT(DISTINCT ph.channel_id) FILTER (WHERE ph.channel_id IS NOT NULL) AS channel_count,
+                    ARRAY_AGG(DISTINCT ph.channel_id ORDER BY ph.channel_id)
+                        FILTER (WHERE ph.channel_id IS NOT NULL) AS channels,
                     TO_TIMESTAMP(MAX(ph.timestamp)) AS last_seen
                 FROM packet_history ph
                 LEFT JOIN node_info ni ON ph.from_node_id = ni.node_id
@@ -502,7 +505,9 @@ def get_top_channel_utilizers():
                         "hw_model": row.get("hw_model"),
                         "avg_channel_utilization": row.get("avg_channel_utilization"),
                         "avg_air_util_tx": row.get("avg_air_util_tx"),
-                        "samples": row.get("samples", 0) or 0,
+                        "packet_count": row.get("packet_count", 0) or 0,
+                        "channel_count": row.get("channel_count", 0) or 0,
+                        "channels": row.get("channels") or [],
                         "last_seen": row.get("last_seen"),
                     }
                 )
