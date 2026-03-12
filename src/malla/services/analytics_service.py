@@ -1376,6 +1376,7 @@ class AnalyticsService:
     ) -> list[dict[str, Any]]:
         """Get distribution of packets by gateway using optimized SQL query."""
         from ..database.connection import get_db_connection, put_db_connection
+        from ..utils.node_utils import convert_node_id, get_bulk_node_names
 
         # Build WHERE clause (excluding gateway_id filter since we're analyzing gateways)
         where_conditions: list[str] = ["timestamp >= %s"]
@@ -1422,6 +1423,42 @@ class AnalyticsService:
             )
 
             gateway_stats = [dict(row) for row in cursor.fetchall()]
+
+            gateway_node_ids: list[int] = []
+            for stat in gateway_stats:
+                gateway_id = stat.get("gateway_id")
+                if not isinstance(gateway_id, str) or not gateway_id.startswith("!"):
+                    continue
+
+                try:
+                    gateway_node_ids.append(convert_node_id(gateway_id))
+                except (TypeError, ValueError):
+                    continue
+
+            node_names = get_bulk_node_names(gateway_node_ids) if gateway_node_ids else {}
+
+            for stat in gateway_stats:
+                gateway_id = stat.get("gateway_id")
+                if not isinstance(gateway_id, str):
+                    stat["display_name"] = "Unknown"
+                    continue
+
+                if not gateway_id.startswith("!"):
+                    stat["display_name"] = gateway_id
+                    continue
+
+                try:
+                    gateway_node_id = convert_node_id(gateway_id)
+                except (TypeError, ValueError):
+                    stat["display_name"] = gateway_id
+                    continue
+
+                node_name = node_names.get(gateway_node_id)
+                if node_name and node_name != gateway_id:
+                    stat["node_name"] = node_name
+                    stat["display_name"] = f"{node_name} ({gateway_id})"
+                else:
+                    stat["display_name"] = gateway_id
         finally:
             if cursor:
                 cursor.close()

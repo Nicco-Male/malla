@@ -1100,7 +1100,7 @@
             }
 
             const topGateways = gateways.slice(0, 8);
-            const labels = topGateways.map(g => g.gateway_id || 'Unknown');
+            const labels = topGateways.map(g => g.display_name || g.node_name || g.gateway_id || 'Unknown');
             const packetCounts = topGateways.map(g => g.packet_count || 0);
             const uniqueSources = topGateways.map(g => g.unique_sources || 0);
 
