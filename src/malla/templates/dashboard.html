@@ -914,7 +914,7 @@
 
         // Take top 10 gateways by packet count
         const topGateways = gatewayData.slice(0, 10);
-        const labels = topGateways.map(g => g.gateway_id || 'Unknown');
+        const labels = topGateways.map(g => g.display_name || g.node_name || g.gateway_id || 'Unknown');
         const data = topGateways.map(g => g.total_packets || 0);
 
         const colors = getChartColors();
