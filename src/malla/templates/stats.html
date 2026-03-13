@@ -1752,7 +1752,7 @@
                 </td>
                 <td class="text-end signal-node-metrics-cell">
                     <div class="d-flex flex-column align-items-end gap-1">
-                        <div class="progress w-100" style="height: 0.6rem;">
+                        <div class="progress signal-node-gauge" style="height: 0.5rem;">
                             <div class="progress-bar ${signalClass}" role="progressbar"
                                  style="width: ${gaugeValue}%;"
                                  aria-valuenow="${gaugeValue}" aria-valuemin="0" aria-valuemax="100">
@@ -2517,6 +2517,11 @@
         min-width: 0;
     }
 
+    .signal-node-gauge {
+        width: min(100%, 14rem);
+        margin-left: auto;
+    }
+
     .stats-table-scroll-mobile-fit {
         overflow-x: auto;
     }
@@ -2580,6 +2585,11 @@
             font-size: 0.82rem;
             line-height: 1.15;
             text-align: right;
+        }
+
+        #signalNodesTable .signal-node-gauge {
+            width: min(100%, 8.5rem);
+            height: 0.42rem !important;
         }
     
         #topAirtimeAveragesTitle {
