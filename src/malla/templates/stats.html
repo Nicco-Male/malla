@@ -611,149 +611,116 @@
             subtitle.textContent = `Ranking telemetry per media nei bucket temporali (1h) di channel_utilization e air_util_tx (${currentHours}h)`;
         }
 
-        async function fetchEndpoint(name, url) {
-            try {
-                const response = await fetch(url);
-                if (!response.ok) {
-                    const message = `HTTP ${response.status} ${response.statusText}`;
-                    console.error(`Failed to load ${name}: ${message}`);
-                    return { error: message };
-                }
-
-                try {
-                    return await response.json();
-                } catch (parseError) {
-                    console.error(`Failed to parse ${name} response:`, parseError);
-                    return { error: 'Failed to parse response data' };
-                }
-            } catch (fetchError) {
-                console.error(`Failed to fetch ${name}:`, fetchError);
-                return { error: 'Network error while fetching data' };
-            }
-        }
-
-        function safeRender(componentId, renderFn, fallbackMessage = 'Failed to render component') {
-            try {
-                renderFn();
-            } catch (renderError) {
-                console.error(`Error rendering ${componentId}:`, renderError);
-                showError(componentId, fallbackMessage);
-            }
-        }
-
         async function loadStats() {
             const hoursParam = `?hours=${currentHours}`;
-            console.log('Loading stats data...');
-            const endpointDefs = [
-                { key: 'hottestData', name: 'hottest', url: `/api/stats/hottest${hoursParam}` },
-                { key: 'coldestData', name: 'coldest', url: `/api/stats/coldest${hoursParam}` },
-                { key: 'utilData', name: 'utilization', url: `/api/stats/utilization${hoursParam}` },
-                { key: 'packetTypesData', name: 'packet types', url: `/api/stats/packet-types${hoursParam}` },
-                { key: 'channelsData', name: 'channels', url: `/api/stats/channels${hoursParam}` },
-                { key: 'healthData', name: 'network health', url: `/api/stats/network-health${hoursParam}` },
-                { key: 'nodeNamingData', name: 'node naming', url: '/api/stats/node-naming' },
-                { key: 'highlightedNodesData', name: 'highlighted nodes', url: `/api/stats/highlighted-nodes${hoursParam}` },
-                { key: 'gatewayData', name: 'gateways', url: `/api/stats/gateways${hoursParam}` },
-                { key: 'signalData', name: 'signal quality', url: `/api/stats/signal-quality${hoursParam}` },
-                { key: 'signalNodesData', name: 'signal quality nodes', url: `/api/stats/signal-quality/nodes${hoursParam}` },
-                { key: 'temporalData', name: 'delivery', url: `/api/stats/temporal${hoursParam}` },
-                { key: 'batteryData', name: 'battery', url: `/api/stats/telemetry/battery${hoursParam}` },
-                { key: 'humidityData', name: 'humidity', url: `/api/stats/telemetry/humidity${hoursParam}` },
-                { key: 'voltageData', name: 'voltage', url: `/api/stats/telemetry/voltage${hoursParam}` },
-                { key: 'topChannelUtilizersData', name: 'top channel utilizers', url: `/api/stats/top-channel-utilizers${hoursParam}` },
-                { key: 'gatewayStatusData', name: 'gateway status', url: `/gateway/api/gateways/status${hoursParam}` },
-                { key: 'hopDistributionData', name: 'hop distribution', url: `/api/stats/hop-distribution${hoursParam}` },
-                { key: 'hardwareModelsData', name: 'hardware models', url: `/api/stats/hardware-models${hoursParam}` },
-                { key: 'peakHoursData', name: 'peak hours', url: `/api/stats/peak-hours${hoursParam}` },
-                { key: 'topAirtimeAveragesData', name: 'top airtime averages', url: `/api/stats/top-airtime-nodes-6h${hoursParam}` }
-            ];
+            try {
+                console.log('Loading stats data...');
+                const responses = await Promise.all([
+                    fetch(`/api/stats/hottest${hoursParam}`),
+                    fetch(`/api/stats/coldest${hoursParam}`),
+                    fetch(`/api/stats/utilization${hoursParam}`),
+                    fetch(`/api/stats/packet-types${hoursParam}`),
+                    fetch(`/api/stats/channels${hoursParam}`),
+                    fetch(`/api/stats/network-health${hoursParam}`),
+                    fetch(`/api/stats/node-naming`),
+                    fetch(`/api/stats/highlighted-nodes${hoursParam}`),
+                    fetch(`/api/stats/gateways${hoursParam}`),
+                    fetch(`/api/stats/signal-quality${hoursParam}`),
+                    fetch(`/api/stats/signal-quality/nodes${hoursParam}`),
+                    fetch(`/api/stats/temporal${hoursParam}`),
+                    fetch(`/api/stats/telemetry/battery${hoursParam}`),
+                    fetch(`/api/stats/telemetry/humidity${hoursParam}`),
+                    fetch(`/api/stats/telemetry/voltage${hoursParam}`),
+                    fetch(`/api/stats/top-channel-utilizers${hoursParam}`),
+                    fetch(`/gateway/api/gateways/status${hoursParam}`),
+                    fetch(`/api/stats/hop-distribution${hoursParam}`),
+                    fetch(`/api/stats/hardware-models${hoursParam}`),
+                    fetch(`/api/stats/peak-hours${hoursParam}`),
+                    fetch(`/api/stats/top-airtime-nodes-6h${hoursParam}`)
+                ]);
 
-            const results = await Promise.all(endpointDefs.map(({ name, url }) => fetchEndpoint(name, url)));
-            const dataByKey = Object.fromEntries(endpointDefs.map((definition, index) => [definition.key, results[index]]));
+                const names = ['hottest', 'coldest', 'utilization', 'packet types', 'channels', 'network health', 'node naming', 'highlighted nodes', 'gateways', 'signal quality', 'signal quality nodes', 'delivery', 'battery', 'humidity', 'voltage', 'top channel utilizers', 'gateway status', 'hop distribution', 'hardware models', 'peak hours', 'top airtime averages'];
+                const [
+                    hottestData,
+                    coldestData,
+                    utilData,
+                    packetTypesData,
+                    channelsData,
+                    healthData,
+                    nodeNamingData,
+                    highlightedNodesData,
+                    gatewayData,
+                    signalData,
+                    signalNodesData,
+                    temporalData,
+                    batteryData,
+                    humidityData,
+                    voltageData,
+                    topChannelUtilizersData,
+                    gatewayStatusData,
+                    hopDistributionData,
+                    hardwareModelsData,
+                    peakHoursData,
+                    topAirtimeAveragesData
+                ] = await Promise.all(responses.map(async (r, idx) => {
+                    if (!r.ok) {
+                        const message = `HTTP ${r.status} ${r.statusText}`;
+                        console.error(`Failed to load ${names[idx]}: ${message}`);
+                        return { error: message };
+                    }
+                    try {
+                        return await r.json();
+                    } catch (e) {
+                        console.error('Failed to parse JSON response:', e);
+                        return { error: 'Failed to parse response data' };
+                    }
+                }));
 
-            const {
-                hottestData,
-                coldestData,
-                utilData,
-                packetTypesData,
-                channelsData,
-                healthData,
-                nodeNamingData,
-                highlightedNodesData,
-                gatewayData,
-                signalData,
-                signalNodesData,
-                temporalData,
-                batteryData,
-                humidityData,
-                voltageData,
-                topChannelUtilizersData,
-                gatewayStatusData,
-                hopDistributionData,
-                hardwareModelsData,
-                peakHoursData,
-                topAirtimeAveragesData
-            } = dataByKey;
+                console.log('Stats data loaded successfully');
 
-            console.log('Stats data loaded successfully');
-
-            safeRender('hottestNodesTable', () => {
+                // Handle each data set with error checking
                 if (hottestData && hottestData.error) {
                     showError('hottestNodesTable', hottestData.error);
                 } else {
                     renderNodeTable('hottestNodesTable', Array.isArray(hottestData) ? hottestData : (hottestData?.nodes || hottestData || []));
                 }
-            });
 
-            safeRender('coldestNodesTable', () => {
                 if (coldestData && coldestData.error) {
                     showError('coldestNodesTable', coldestData.error);
                 } else {
                     renderNodeTable('coldestNodesTable', Array.isArray(coldestData) ? coldestData : (coldestData?.nodes || coldestData || []));
                 }
-            });
 
-            safeRender('utilizationChart', () => {
                 if (utilData && utilData.error) {
                     showError('utilizationChart', utilData.error);
                 } else {
                     renderUtilizationChart(utilData || {});
                 }
-            });
 
-            safeRender('packetTypesChart', () => {
                 if (packetTypesData && packetTypesData.error) {
                     showError('packetTypesChart', packetTypesData.error);
                 } else {
                     renderPacketTypesChart(packetTypesData || {});
                 }
-            });
 
-            safeRender('channelsChart', () => {
                 if (channelsData && channelsData.error) {
                     showError('channelsChart', channelsData.error);
                 } else {
                     renderChannelsChart(channelsData || {});
                 }
-            });
 
-            safeRender('networkOverview', () => {
                 if (healthData && healthData.error) {
                     showError('networkOverview', healthData.error);
                 } else {
                     renderNetworkHealth(healthData || {});
                 }
-            });
 
-            safeRender('customNamedNodes', () => {
                 if (nodeNamingData && nodeNamingData.error) {
                     console.error('Failed to load node naming stats:', nodeNamingData.error);
                 } else {
                     renderNodeNamingStats(nodeNamingData || {});
                 }
-            });
 
-            safeRender('highlightedNodesTable', () => {
                 if (Array.isArray(highlightedNodesData)) {
                     renderHighlightedNodesTable('highlightedNodesTable', highlightedNodesData);
                 } else if (highlightedNodesData && highlightedNodesData.error) {
@@ -761,25 +728,19 @@
                 } else {
                     renderHighlightedNodesTable('highlightedNodesTable', []);
                 }
-            });
 
-            safeRender('gatewayChart', () => {
                 if (gatewayData && gatewayData.error) {
                     showError('gatewayChart', gatewayData.error);
                 } else {
                     renderGatewayChart(gatewayData || {});
                 }
-            });
 
-            safeRender('signalQualityChart', () => {
                 if (signalData && signalData.error) {
                     showError('signalQualityChart', signalData.error);
                 } else {
                     renderSignalQualityChart(signalData || {});
                 }
-            });
 
-            safeRender('signalNodesTable', () => {
                 if (Array.isArray(signalNodesData)) {
                     renderSignalNodesTable('signalNodesTable', signalNodesData);
                 } else if (signalNodesData && signalNodesData.error) {
@@ -787,17 +748,13 @@
                 } else {
                     renderSignalNodesTable('signalNodesTable', []);
                 }
-            });
 
-            safeRender('deliveryChart', () => {
                 if (temporalData && temporalData.error) {
                     showError('deliveryChart', temporalData.error);
                 } else {
                     renderDeliveryChart(temporalData || {});
                 }
-            });
 
-            safeRender('topChannelUtilizersTable', () => {
                 if (Array.isArray(topChannelUtilizersData)) {
                     renderTopChannelUtilizersTable('topChannelUtilizersTable', topChannelUtilizersData);
                 } else if (topChannelUtilizersData && Array.isArray(topChannelUtilizersData.nodes)) {
@@ -807,50 +764,38 @@
                 } else {
                     renderTopChannelUtilizersTable('topChannelUtilizersTable', []);
                 }
-            });
 
-            safeRender('gatewayStatusTable', () => {
                 if (gatewayStatusData && gatewayStatusData.error) {
                     showError('gatewayStatusTable', gatewayStatusData.error);
                 } else {
                     renderGatewayStatusTable('gatewayStatusTable', gatewayStatusData || {});
                 }
-            });
 
-            safeRender('hopDistributionChart', () => {
                 if (hopDistributionData && hopDistributionData.error) {
                     showError('hopDistributionChart', hopDistributionData.error);
                 } else {
                     renderHopDistributionChart(hopDistributionData || {});
                 }
-            });
 
-            safeRender('hardwareModelsChart', () => {
                 if (hardwareModelsData && hardwareModelsData.error) {
                     showError('hardwareModelsChart', hardwareModelsData.error);
                 } else {
                     renderHardwareModelsChart(hardwareModelsData || []);
                 }
-            });
 
-            safeRender('peakHoursChart', () => {
                 if (peakHoursData && peakHoursData.error) {
                     showError('peakHoursChart', peakHoursData.error);
                 } else {
                     renderPeakHoursChart(peakHoursData || {});
                 }
-            });
 
-            safeRender('topAirtimeAveragesTable', () => {
                 if (topAirtimeAveragesData && topAirtimeAveragesData.error) {
                     showError('topAirtimeAveragesTable', topAirtimeAveragesData.error);
                 } else {
                     renderTopAirtimeAveragesTable('topAirtimeAveragesTable', topAirtimeAveragesData?.nodes || []);
                 }
-            });
 
-            // Handle telemetry data (arrays, not objects)
-            safeRender('batteryChart', () => {
+                // Handle telemetry data (arrays, not objects)
                 if (Array.isArray(batteryData)) {
                     renderTelemetryChart('batteryChart', batteryData, 'Battery Level', '%', '#28a745');
                 } else if (batteryData && batteryData.error) {
@@ -858,9 +803,7 @@
                 } else {
                     renderTelemetryChart('batteryChart', [], 'Battery Level', '%', '#28a745');
                 }
-            });
 
-            safeRender('humidityChart', () => {
                 if (Array.isArray(humidityData)) {
                     renderTelemetryChart('humidityChart', humidityData, 'Humidity', '%', '#0dcaf0');
                 } else if (humidityData && humidityData.error) {
@@ -868,9 +811,7 @@
                 } else {
                     renderTelemetryChart('humidityChart', [], 'Humidity', '%', '#0dcaf0');
                 }
-            });
 
-            safeRender('voltageChart', () => {
                 if (Array.isArray(voltageData)) {
                     renderTelemetryChart('voltageChart', voltageData, 'Voltage', 'V', '#ffc107');
                 } else if (voltageData && voltageData.error) {
@@ -878,7 +819,29 @@
                 } else {
                     renderTelemetryChart('voltageChart', [], 'Voltage', 'V', '#ffc107');
                 }
-            });
+            } catch (error) {
+                console.error('Error loading stats:', error);
+                [
+                    'hottestNodesTable',
+                    'coldestNodesTable',
+                    'utilizationChart',
+                    'packetTypesChart',
+                    'channelsChart',
+                    'gatewayChart',
+                    'signalQualityChart',
+                    'deliveryChart',
+                    'networkOverview',
+                    'batteryChart',
+                    'humidityChart',
+                    'voltageChart',
+                    'topChannelUtilizersTable',
+                    'gatewayStatusTable',
+                    'hopDistributionChart',
+                    'hardwareModelsChart',
+                    'peakHoursChart',
+                    'topAirtimeAveragesTable'
+                ].forEach(id => showError(id, 'Failed to load data. Please refresh the page.'));
+            }
         }
 
         function insertChartLoadAlert() {
