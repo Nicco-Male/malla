@@ -534,6 +534,7 @@
         let currentHours = 6;
         const chartInstances = {};
         const relativeTimeFormatter = new Intl.RelativeTimeFormat(document.documentElement.lang || navigator.language || 'en', { numeric: 'auto' });
+        const REQUEST_TIMEOUT_MS = 12000;
         const computedStyle = getComputedStyle(document.documentElement);
         const palette = {
             primary: computedStyle.getPropertyValue('--bs-primary').trim(),
@@ -623,6 +624,30 @@
         }
 
 
+        async function fetchJsonWithTimeout(url, name) {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+
+            try {
+                const response = await fetch(url, { signal: controller.signal });
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status} ${response.statusText}`);
+                }
+
+                return await response.json();
+            } catch (error) {
+                const message = error?.name === 'AbortError'
+                    ? `Request timeout after ${REQUEST_TIMEOUT_MS / 1000}s`
+                    : (error?.message || 'Unknown error');
+                console.error(`Failed to load ${name}: ${message}`);
+                return { error: message };
+            } finally {
+                clearTimeout(timeoutId);
+            }
+        }
+
+
+
         function updateAirtimeAveragesHeading() {
             const title = document.getElementById('topAirtimeAveragesTitle');
             const subtitle = document.getElementById('topAirtimeAveragesSubtitle');
@@ -636,31 +661,30 @@
             const hoursParam = `?hours=${currentHours}`;
             try {
                 console.log('Loading stats data...');
-                const responses = await Promise.all([
-                    fetch(`/api/stats/hottest${hoursParam}`),
-                    fetch(`/api/stats/coldest${hoursParam}`),
-                    fetch(`/api/stats/utilization${hoursParam}`),
-                    fetch(`/api/stats/packet-types${hoursParam}`),
-                    fetch(`/api/stats/channels${hoursParam}`),
-                    fetch(`/api/stats/network-health${hoursParam}`),
-                    fetch(`/api/stats/node-naming`),
-                    fetch(`/api/stats/highlighted-nodes${hoursParam}`),
-                    fetch(`/api/stats/gateways${hoursParam}`),
-                    fetch(`/api/stats/signal-quality${hoursParam}`),
-                    fetch(`/api/stats/signal-quality/nodes${hoursParam}`),
-                    fetch(`/api/stats/temporal${hoursParam}`),
-                    fetch(`/api/stats/telemetry/battery${hoursParam}`),
-                    fetch(`/api/stats/telemetry/humidity${hoursParam}`),
-                    fetch(`/api/stats/telemetry/voltage${hoursParam}`),
-                    fetch(`/api/stats/top-channel-utilizers${hoursParam}`),
-                    fetch(`/gateway/api/gateways/status${hoursParam}`),
-                    fetch(`/api/stats/hop-distribution${hoursParam}`),
-                    fetch(`/api/stats/hardware-models${hoursParam}`),
-                    fetch(`/api/stats/peak-hours${hoursParam}`),
-                    fetch(`/api/stats/top-airtime-nodes-6h${hoursParam}`)
-                ]);
+                const endpoints = [
+                    { name: 'hottest', url: `/api/stats/hottest${hoursParam}` },
+                    { name: 'coldest', url: `/api/stats/coldest${hoursParam}` },
+                    { name: 'utilization', url: `/api/stats/utilization${hoursParam}` },
+                    { name: 'packet types', url: `/api/stats/packet-types${hoursParam}` },
+                    { name: 'channels', url: `/api/stats/channels${hoursParam}` },
+                    { name: 'network health', url: `/api/stats/network-health${hoursParam}` },
+                    { name: 'node naming', url: `/api/stats/node-naming` },
+                    { name: 'highlighted nodes', url: `/api/stats/highlighted-nodes${hoursParam}` },
+                    { name: 'gateways', url: `/api/stats/gateways${hoursParam}` },
+                    { name: 'signal quality', url: `/api/stats/signal-quality${hoursParam}` },
+                    { name: 'signal quality nodes', url: `/api/stats/signal-quality/nodes${hoursParam}` },
+                    { name: 'delivery', url: `/api/stats/temporal${hoursParam}` },
+                    { name: 'battery', url: `/api/stats/telemetry/battery${hoursParam}` },
+                    { name: 'humidity', url: `/api/stats/telemetry/humidity${hoursParam}` },
+                    { name: 'voltage', url: `/api/stats/telemetry/voltage${hoursParam}` },
+                    { name: 'top channel utilizers', url: `/api/stats/top-channel-utilizers${hoursParam}` },
+                    { name: 'gateway status', url: `/gateway/api/gateways/status${hoursParam}` },
+                    { name: 'hop distribution', url: `/api/stats/hop-distribution${hoursParam}` },
+                    { name: 'hardware models', url: `/api/stats/hardware-models${hoursParam}` },
+                    { name: 'peak hours', url: `/api/stats/peak-hours${hoursParam}` },
+                    { name: 'top airtime averages', url: `/api/stats/top-airtime-nodes-6h${hoursParam}` }
+                ];
 
-                const names = ['hottest', 'coldest', 'utilization', 'packet types', 'channels', 'network health', 'node naming', 'highlighted nodes', 'gateways', 'signal quality', 'signal quality nodes', 'delivery', 'battery', 'humidity', 'voltage', 'top channel utilizers', 'gateway status', 'hop distribution', 'hardware models', 'peak hours', 'top airtime averages'];
                 const [
                     hottestData,
                     coldestData,
@@ -683,19 +707,7 @@
                     hardwareModelsData,
                     peakHoursData,
                     topAirtimeAveragesData
-                ] = await Promise.all(responses.map(async (r, idx) => {
-                    if (!r.ok) {
-                        const message = `HTTP ${r.status} ${r.statusText}`;
-                        console.error(`Failed to load ${names[idx]}: ${message}`);
-                        return { error: message };
-                    }
-                    try {
-                        return await r.json();
-                    } catch (e) {
-                        console.error('Failed to parse JSON response:', e);
-                        return { error: 'Failed to parse response data' };
-                    }
-                }));
+                ] = await Promise.all(endpoints.map(({ url, name }) => fetchJsonWithTimeout(url, name)));
 
                 console.log('Stats data loaded successfully');
 
