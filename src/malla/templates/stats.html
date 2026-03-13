@@ -533,7 +533,7 @@
     (() => {
         let currentHours = 6;
         const chartInstances = {};
-        const relativeTimeFormatter = new Intl.RelativeTimeFormat('en', { numeric: 'auto' });
+        const relativeTimeFormatter = new Intl.RelativeTimeFormat(document.documentElement.lang || navigator.language || 'en', { numeric: 'auto' });
         const computedStyle = getComputedStyle(document.documentElement);
         const palette = {
             primary: computedStyle.getPropertyValue('--bs-primary').trim(),
@@ -567,38 +567,59 @@
             loadStats();
         });
 
-        function formatRelativeTime(value) {
-            if (!value) {
-                return 'Unknown';
+        function parseTimestamp(value) {
+            if (value === null || value === undefined || value === '') {
+                return null;
             }
 
-            const date = typeof value === 'number' ? new Date(value * 1000) : new Date(value);
-            if (Number.isNaN(date.getTime())) {
-                return 'Unknown';
+            if (value instanceof Date) {
+                return Number.isNaN(value.getTime()) ? null : value;
             }
 
-            // Explicit guard in case Moment is injected by other templates/plugins.
-            if (typeof moment !== 'function') {
-                const elapsedSeconds = Math.round((date.getTime() - Date.now()) / 1000);
-                const units = [
-                    { unit: 'year', seconds: 31536000 },
-                    { unit: 'month', seconds: 2592000 },
-                    { unit: 'week', seconds: 604800 },
-                    { unit: 'day', seconds: 86400 },
-                    { unit: 'hour', seconds: 3600 },
-                    { unit: 'minute', seconds: 60 }
-                ];
+            if (typeof value === 'number') {
+                // Accept Unix seconds and Unix milliseconds.
+                const millis = value < 1e12 ? value * 1000 : value;
+                const date = new Date(millis);
+                return Number.isNaN(date.getTime()) ? null : date;
+            }
 
-                for (const { unit, seconds } of units) {
-                    if (Math.abs(elapsedSeconds) >= seconds) {
-                        return relativeTimeFormatter.format(Math.round(elapsedSeconds / seconds), unit);
-                    }
+            const date = new Date(value);
+            return Number.isNaN(date.getTime()) ? null : date;
+        }
+
+        function formatRelativeWithIntl(date) {
+            const elapsedSeconds = Math.round((date.getTime() - Date.now()) / 1000);
+            const units = [
+                { unit: 'year', seconds: 31536000 },
+                { unit: 'month', seconds: 2592000 },
+                { unit: 'week', seconds: 604800 },
+                { unit: 'day', seconds: 86400 },
+                { unit: 'hour', seconds: 3600 },
+                { unit: 'minute', seconds: 60 }
+            ];
+
+            for (const { unit, seconds } of units) {
+                if (Math.abs(elapsedSeconds) >= seconds) {
+                    return relativeTimeFormatter.format(Math.round(elapsedSeconds / seconds), unit);
                 }
-
-                return relativeTimeFormatter.format(elapsedSeconds, 'second');
             }
 
-            return moment(date).fromNow();
+            return relativeTimeFormatter.format(elapsedSeconds, 'second');
+        }
+
+        function formatRelativeTime(value) {
+            const date = parseTimestamp(value);
+            if (!date) {
+                return 'Unknown';
+            }
+
+            // Explicit guard requested: never assume Moment exists.
+            if (typeof moment !== 'function') {
+                return formatRelativeWithIntl(date);
+            }
+
+            // Keep behavior deterministic and independent from external libs.
+            return formatRelativeWithIntl(date);
         }
 
 
