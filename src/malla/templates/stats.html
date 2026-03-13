@@ -2440,6 +2440,11 @@
         table-layout: fixed;
     }
 
+    #hottestNodesTable,
+    #coldestNodesTable {
+        width: 100% !important;
+    }
+
     #topAirtimeAveragesTable {
         min-width: 900px;
         table-layout: fixed;
@@ -2464,21 +2469,22 @@
     #hottestNodesTable td:nth-child(1),
     #coldestNodesTable th:nth-child(1),
     #coldestNodesTable td:nth-child(1) {
-        width: 52%;
+        width: 48%;
     }
 
     #hottestNodesTable th:nth-child(2),
     #hottestNodesTable td:nth-child(2),
     #coldestNodesTable th:nth-child(2),
     #coldestNodesTable td:nth-child(2) {
-        width: 18%;
+        width: 20%;
     }
 
     #hottestNodesTable th:nth-child(3),
     #hottestNodesTable td:nth-child(3),
     #coldestNodesTable th:nth-child(3),
     #coldestNodesTable td:nth-child(3) {
-        width: 30%;
+        width: 32%;
+        white-space: nowrap;
     }
 
     #highlightedNodesTable th:nth-child(1),
