@@ -1739,7 +1739,7 @@
                                     ${displayName}
                                 </a>
                             </div>
-                            <div class="small text-muted node-meta-wrap">
+                            <div class="small text-muted node-meta-wrap signal-node-hw">
                                 ${node.hw_model || 'Unknown Node'}
                             </div>
                         </div>
@@ -1759,8 +1759,8 @@
                             </div>
                         </div>
                         <div class="small text-muted signal-node-metrics-text">
-                            ${signalLabel}${rssi !== null && rssi !== undefined ? ` • RSSI ${rssi.toFixed(1)} dBm` : ''}
-                            ${snr !== null && snr !== undefined ? ` • SNR ${snr.toFixed(1)} dB` : ''}
+                            ${signalLabel}${rssi !== null && rssi !== undefined ? ` • R ${rssi.toFixed(1)} dBm` : ''}
+                            ${snr !== null && snr !== undefined ? ` • S ${snr.toFixed(1)} dB` : ''}
                         </div>
                     </div>
                 </td>
@@ -2532,6 +2532,56 @@
             min-width: 560px;
         }
 
+        #signalNodesTable {
+            min-width: 0;
+            table-layout: fixed;
+        }
+
+        #signalNodesTable th,
+        #signalNodesTable td {
+            padding: 0.5rem 0.35rem;
+            vertical-align: middle;
+        }
+
+        #signalNodesTable th:nth-child(1),
+        #signalNodesTable td:nth-child(1) {
+            width: 30%;
+        }
+
+        #signalNodesTable th:nth-child(2),
+        #signalNodesTable td:nth-child(2) {
+            width: 12%;
+        }
+
+        #signalNodesTable th:nth-child(3),
+        #signalNodesTable td:nth-child(3) {
+            width: 58%;
+        }
+
+        #signalNodesTable .node-avatar {
+            width: 26px;
+            height: 26px;
+            font-size: 0.68rem;
+            margin-right: 0.35rem !important;
+            flex: 0 0 auto;
+        }
+
+        #signalNodesTable .fw-bold,
+        #signalNodesTable .fw-bold a {
+            font-size: 0.92rem;
+            line-height: 1.2;
+        }
+
+        #signalNodesTable .signal-node-hw {
+            display: none;
+        }
+
+        #signalNodesTable .signal-node-metrics-text {
+            font-size: 0.82rem;
+            line-height: 1.15;
+            text-align: right;
+        }
+    
         #topAirtimeAveragesTitle {
             font-size: 1.1rem;
             line-height: 1.25;
