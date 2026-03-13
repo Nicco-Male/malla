@@ -355,9 +355,9 @@
 <!-- Advanced Tables -->
 <div class="row mb-4">
     <!-- Highlighted Nodes -->
-    <div class="col-lg-7 mb-4">
+    <div class="col-lg-6 mb-4">
         <div class="card shadow-sm h-100 glass-panel">
-            <div class="card-header bg-transparent border-0 d-flex justify-content-between align-items-center">
+            <div class="card-header bg-transparent border-0 d-flex justify-content-between align-items-center flex-wrap gap-2">
                 <div>
                     <h5 class="mb-0 card-title"><i class="bi bi-stars me-2"></i>Highlighted Nodes</h5>
                     <small class="text-muted">Most active nodes with optional signal quality filter</small>
@@ -394,7 +394,7 @@
     </div>
 
     <!-- Top Channel Utilizers -->
-    <div class="col-lg-5 mb-4">
+    <div class="col-lg-6 mb-4">
         <div class="card shadow-sm h-100 glass-panel">
             <div class="card-header bg-transparent border-0 d-flex justify-content-between align-items-center">
                 <div>
@@ -1871,6 +1871,8 @@
                 return;
             }
 
+            const maxPackets = Math.max(...nodes.map((node) => Number(node.packet_count) || 0), 1);
+
             nodes.forEach(node => {
                 const tr = document.createElement('tr');
 
@@ -1881,7 +1883,12 @@
                 const channelCount = node.channel_count || channels.length || 0;
                 const packetCount = node.packet_count || 0;
 
-                const channelList = channels.length ? channels.join(', ') : 'N/A';
+                const topChannels = channels.slice(0, 2);
+                const hiddenChannels = Math.max(channels.length - topChannels.length, 0);
+                const packetsRatio = Math.round((packetCount / maxPackets) * 100);
+                const channelBadges = topChannels.map((channel) =>
+                    `<span class="channel-chip" title="${channel}">${channel}</span>`
+                ).join('');
 
                 tr.innerHTML = `
                 <td class="top-channel-node-cell">
@@ -1895,19 +1902,25 @@
                                     ${displayName}
                                 </a>
                             </div>
-                            <div class="small text-muted utilizer-meta-wrap">
-                                Channels: ${channelList}
+                            <div class="small text-muted utilizer-meta-wrap top-channel-list-wrap">
+                                ${channelBadges || '<span class="text-muted">No channels</span>'}
+                                ${hiddenChannels ? `<span class="channel-chip channel-chip-more">+${hiddenChannels}</span>` : ''}
                             </div>
                         </div>
                     </div>
                 </td>
-                <td class="text-center">
-                    <span class="badge bg-info text-white border">
-                        ${channelCount}
-                    </span>
+                <td class="text-center top-channel-metric-cell">
+                    <span class="badge bg-info text-white border top-channel-count-badge">${channelCount}</span>
                 </td>
-                <td class="text-end">
-                    ${packetCount.toLocaleString()}
+                <td class="text-end top-channel-packets-cell">
+                    <div class="d-flex flex-column align-items-end gap-1 top-channel-packets-wrap">
+                        <span class="fw-semibold top-channel-packets-value">${packetCount.toLocaleString()}</span>
+                        <div class="progress top-channel-packets-progress" role="progressbar"
+                             aria-label="Packet volume"
+                             aria-valuenow="${packetsRatio}" aria-valuemin="0" aria-valuemax="100">
+                            <div class="progress-bar bg-primary" style="width: ${packetsRatio}%;"></div>
+                        </div>
+                    </div>
                 </td>
             `;
 
@@ -2489,7 +2502,7 @@
 
     #highlightedNodesTable th:nth-child(1),
     #highlightedNodesTable td:nth-child(1) {
-        width: 52%;
+        width: 50%;
     }
 
     #highlightedNodesTable th:nth-child(2),
@@ -2499,22 +2512,94 @@
 
     #highlightedNodesTable th:nth-child(3),
     #highlightedNodesTable td:nth-child(3) {
-        width: 30%;
+        width: 32%;
     }
 
     #topChannelUtilizersTable th:nth-child(1),
     #topChannelUtilizersTable td:nth-child(1) {
-        width: 58%;
+        width: 60%;
     }
 
     #topChannelUtilizersTable th:nth-child(2),
     #topChannelUtilizersTable td:nth-child(2) {
-        width: 20%;
+        width: 14%;
     }
 
     #topChannelUtilizersTable th:nth-child(3),
     #topChannelUtilizersTable td:nth-child(3) {
-        width: 22%;
+        width: 26%;
+    }
+
+    .top-channel-list-wrap {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.25rem;
+        margin-top: 0.15rem;
+    }
+
+    .channel-chip {
+        display: inline-flex;
+        align-items: center;
+        max-width: 9rem;
+        padding: 0.05rem 0.4rem;
+        border-radius: 999px;
+        border: 1px solid rgba(13, 202, 240, 0.45);
+        background: rgba(13, 202, 240, 0.12);
+        color: #8fe9ff;
+        font-size: 0.68rem;
+        line-height: 1.1;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .channel-chip-more {
+        border-color: rgba(255, 255, 255, 0.18);
+        background: rgba(255, 255, 255, 0.08);
+        color: #c3d0e0;
+    }
+
+    .top-channel-count-badge {
+        min-width: 2rem;
+    }
+
+    .top-channel-packets-cell {
+        min-width: 0;
+    }
+
+
+    #topChannelUtilizersTable tbody td {
+        padding-top: 0.55rem;
+        padding-bottom: 0.55rem;
+    }
+
+    .top-channel-packets-wrap {
+        min-width: 0;
+    }
+
+    .top-channel-packets-value {
+        line-height: 1;
+    }
+
+    .top-channel-packets-progress {
+        width: min(100%, 8.5rem);
+        height: 0.38rem;
+        margin-left: auto;
+        background-color: rgba(148, 163, 184, 0.25);
+    }
+
+    .top-channel-packets-progress .progress-bar {
+        min-width: 0.3rem;
+    }
+
+    @media (max-width: 991.98px) {
+        .channel-chip {
+            max-width: 7rem;
+        }
+
+        .top-channel-packets-progress {
+            width: min(100%, 6rem);
+        }
     }
 
     .gateway-info-wrap,
