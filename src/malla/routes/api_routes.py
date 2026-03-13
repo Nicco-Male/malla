@@ -1178,15 +1178,30 @@ def get_signal_quality_nodes():
                     MAX(ni.short_name) AS short_name,
                     MAX(ni.hw_model) AS hw_model,
                     COUNT(*) AS packet_count,
-                    AVG(CAST(ph.rssi AS FLOAT)) AS avg_rssi,
-                    AVG(CAST(ph.snr AS FLOAT)) AS avg_snr,
+                    AVG(
+                        CASE
+                            WHEN ph.rssi BETWEEN -200 AND 20 AND ph.rssi <> 0
+                                THEN CAST(ph.rssi AS FLOAT)
+                        END
+                    ) AS avg_rssi,
+                    AVG(
+                        CASE
+                            WHEN ph.snr BETWEEN -40 AND 40
+                                THEN CAST(ph.snr AS FLOAT)
+                        END
+                    ) AS avg_snr,
                     MAX(ph.timestamp) AS last_seen
                 FROM packet_history ph
                 LEFT JOIN node_info ni ON ph.from_node_id = ni.node_id
                 WHERE {where_clause}
                 GROUP BY ph.from_node_id
                 HAVING COUNT(*) > 0
-                ORDER BY AVG(CAST(ph.rssi AS FLOAT)) DESC NULLS LAST
+                ORDER BY AVG(
+                    CASE
+                        WHEN ph.rssi BETWEEN -200 AND 20 AND ph.rssi <> 0
+                            THEN CAST(ph.rssi AS FLOAT)
+                    END
+                ) DESC NULLS LAST
                 LIMIT 20
                 """,
                 params,
