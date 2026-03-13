@@ -1474,12 +1474,12 @@
                             ${initials}
                         </div>
                         <div>
-                            <div class="fw-bold text-truncate" style="max-width: 180px;">
+                            <div class="fw-bold">
                                 <a href="/node/${nodeId}" class="text-decoration-none text-body">
                                     ${displayName}
                                 </a>
                             </div>
-                            <div class="small text-muted text-truncate" style="max-width: 200px;">
+                            <div class="small text-muted">
                                 ${node.hw_model || 'Unknown Node'}
                             </div>
                         </div>
@@ -1579,7 +1579,7 @@
                         ${packets.toLocaleString()}
                     </span>
                 </td>
-                <td class="text-end" style="min-width: 200px;">
+                <td class="text-end signal-node-metrics-cell">
                     <div class="d-flex flex-column align-items-end gap-1">
                         <div class="progress w-100" style="height: 0.6rem;">
                             <div class="progress-bar ${signalClass}" role="progressbar"
@@ -1587,7 +1587,7 @@
                                  aria-valuenow="${gaugeValue}" aria-valuemin="0" aria-valuemax="100">
                             </div>
                         </div>
-                        <div class="small text-muted">
+                        <div class="small text-muted signal-node-metrics-text">
                             ${signalLabel}${rssi !== null && rssi !== undefined ? ` • RSSI ${rssi.toFixed(1)} dBm` : ''}
                             ${snr !== null && snr !== undefined ? ` • SNR ${snr.toFixed(1)} dB` : ''}
                         </div>
@@ -1810,7 +1810,7 @@
                 <td>
                     <div class="d-flex align-items-center">
                         <span class="badge bg-dark me-2">${gatewayId}</span>
-                        <div>
+                        <div class="gateway-info-wrap">
                             ${gatewayName ? `<div class="fw-semibold">${gatewayName}</div>` : ''}
                             <div class="small text-muted">${sourcesCount} sources</div>
                         </div>
@@ -2247,7 +2247,6 @@
         min-width: 100%;
     }
 
-    #gatewayStatusTable,
     #hottestNodesTable,
     #coldestNodesTable,
     #topChannelUtilizersTable {
@@ -2257,6 +2256,22 @@
     #highlightedNodesTable,
     #signalNodesTable {
         min-width: 760px;
+    }
+
+    #gatewayStatusTable,
+    #signalNodesTable {
+        min-width: 100%;
+        table-layout: fixed;
+    }
+
+    .gateway-info-wrap,
+    .signal-node-metrics-text {
+        overflow-wrap: anywhere;
+        word-break: break-word;
+    }
+
+    .signal-node-metrics-cell {
+        min-width: 220px;
     }
 
     #topAirtimeAveragesTable {
