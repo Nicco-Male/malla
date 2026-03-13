@@ -355,9 +355,9 @@
 <!-- Advanced Tables -->
 <div class="row mb-4">
     <!-- Highlighted Nodes -->
-    <div class="col-lg-5 mb-4">
+    <div class="col-lg-6 mb-4">
         <div class="card shadow-sm h-100 glass-panel">
-            <div class="card-header bg-transparent border-0 d-flex justify-content-between align-items-center">
+            <div class="card-header bg-transparent border-0 d-flex justify-content-between align-items-center flex-wrap gap-2">
                 <div>
                     <h5 class="mb-0 card-title"><i class="bi bi-stars me-2"></i>Highlighted Nodes</h5>
                     <small class="text-muted">Most active nodes with optional signal quality filter</small>
@@ -394,7 +394,7 @@
     </div>
 
     <!-- Top Channel Utilizers -->
-    <div class="col-lg-7 mb-4">
+    <div class="col-lg-6 mb-4">
         <div class="card shadow-sm h-100 glass-panel">
             <div class="card-header bg-transparent border-0 d-flex justify-content-between align-items-center">
                 <div>
@@ -1883,7 +1883,7 @@
                 const channelCount = node.channel_count || channels.length || 0;
                 const packetCount = node.packet_count || 0;
 
-                const topChannels = channels.slice(0, 3);
+                const topChannels = channels.slice(0, 2);
                 const hiddenChannels = Math.max(channels.length - topChannels.length, 0);
                 const packetsRatio = Math.round((packetCount / maxPackets) * 100);
                 const channelBadges = topChannels.map((channel) =>
@@ -1910,17 +1910,16 @@
                     </div>
                 </td>
                 <td class="text-center top-channel-metric-cell">
-                    <span class="badge bg-info text-white border top-channel-count-badge">
-                        ${channelCount}
-                    </span>
-                    <div class="small text-muted mt-1">distinct</div>
+                    <span class="badge bg-info text-white border top-channel-count-badge">${channelCount}</span>
                 </td>
                 <td class="text-end top-channel-packets-cell">
-                    <div class="fw-semibold">${packetCount.toLocaleString()}</div>
-                    <div class="progress top-channel-packets-progress mt-1" role="progressbar"
-                         aria-label="Packet volume"
-                         aria-valuenow="${packetsRatio}" aria-valuemin="0" aria-valuemax="100">
-                        <div class="progress-bar bg-primary" style="width: ${packetsRatio}%;"></div>
+                    <div class="d-flex align-items-center justify-content-end gap-2">
+                        <span class="fw-semibold">${packetCount.toLocaleString()}</span>
+                        <div class="progress top-channel-packets-progress" role="progressbar"
+                             aria-label="Packet volume"
+                             aria-valuenow="${packetsRatio}" aria-valuemin="0" aria-valuemax="100">
+                            <div class="progress-bar bg-primary" style="width: ${packetsRatio}%;"></div>
+                        </div>
                     </div>
                 </td>
             `;
@@ -2534,21 +2533,21 @@
     .top-channel-list-wrap {
         display: flex;
         flex-wrap: wrap;
-        gap: 0.3rem;
-        margin-top: 0.2rem;
+        gap: 0.25rem;
+        margin-top: 0.15rem;
     }
 
     .channel-chip {
         display: inline-flex;
         align-items: center;
-        max-width: 12rem;
-        padding: 0.1rem 0.45rem;
+        max-width: 9rem;
+        padding: 0.05rem 0.4rem;
         border-radius: 999px;
         border: 1px solid rgba(13, 202, 240, 0.45);
         background: rgba(13, 202, 240, 0.12);
         color: #8fe9ff;
-        font-size: 0.72rem;
-        line-height: 1.2;
+        font-size: 0.68rem;
+        line-height: 1.1;
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
@@ -2568,14 +2567,26 @@
         min-width: 0;
     }
 
+
+    #topChannelUtilizersTable tbody td {
+        padding-top: 0.55rem;
+        padding-bottom: 0.55rem;
+    }
+
     .top-channel-packets-progress {
-        height: 0.35rem;
+        width: clamp(4.5rem, 24vw, 10rem);
+        height: 0.32rem;
         background: rgba(13, 110, 253, 0.18);
+        margin-bottom: 0.05rem;
     }
 
     @media (max-width: 991.98px) {
         .channel-chip {
-            max-width: 9rem;
+            max-width: 7rem;
+        }
+
+        .top-channel-packets-progress {
+            width: 4.5rem;
         }
     }
 
