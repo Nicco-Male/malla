@@ -355,7 +355,7 @@
 <!-- Advanced Tables -->
 <div class="row mb-4">
     <!-- Highlighted Nodes -->
-    <div class="col-lg-8 mb-4">
+    <div class="col-lg-7 mb-4">
         <div class="card shadow-sm h-100 glass-panel">
             <div class="card-header bg-transparent border-0 d-flex justify-content-between align-items-center">
                 <div>
@@ -394,7 +394,7 @@
     </div>
 
     <!-- Top Channel Utilizers -->
-    <div class="col-lg-4 mb-4">
+    <div class="col-lg-5 mb-4">
         <div class="card shadow-sm h-100 glass-panel">
             <div class="card-header bg-transparent border-0 d-flex justify-content-between align-items-center">
                 <div>
@@ -672,8 +672,7 @@
             subtitle.textContent = `Ranking telemetry per media nei bucket temporali (1h) di channel_utilization e air_util_tx (${currentHours}h)`;
         }
 
-        async function loadStats() {
-            const hoursParam = `?hours=${currentHours}`;
+        async function fetchEndpoint(name, url) {
             try {
                 console.log('Loading stats data...');
                 const datasets = [
@@ -731,7 +730,41 @@
                     }
                 });
 
-                console.log('Stats data loaded successfully');
+        function safeRender(componentId, renderFn, fallbackMessage = 'Failed to render component') {
+            try {
+                renderFn();
+            } catch (renderError) {
+                console.error(`Error rendering ${componentId}:`, renderError);
+                showError(componentId, fallbackMessage);
+            }
+        }
+
+        async function loadStats() {
+            const hoursParam = `?hours=${currentHours}`;
+            console.log('Loading stats data...');
+            const endpointDefs = [
+                { key: 'hottestData', name: 'hottest', url: `/api/stats/hottest${hoursParam}` },
+                { key: 'coldestData', name: 'coldest', url: `/api/stats/coldest${hoursParam}` },
+                { key: 'utilData', name: 'utilization', url: `/api/stats/utilization${hoursParam}` },
+                { key: 'packetTypesData', name: 'packet types', url: `/api/stats/packet-types${hoursParam}` },
+                { key: 'channelsData', name: 'channels', url: `/api/stats/channels${hoursParam}` },
+                { key: 'healthData', name: 'network health', url: `/api/stats/network-health${hoursParam}` },
+                { key: 'nodeNamingData', name: 'node naming', url: '/api/stats/node-naming' },
+                { key: 'highlightedNodesData', name: 'highlighted nodes', url: `/api/stats/highlighted-nodes${hoursParam}` },
+                { key: 'gatewayData', name: 'gateways', url: `/api/stats/gateways${hoursParam}` },
+                { key: 'signalData', name: 'signal quality', url: `/api/stats/signal-quality${hoursParam}` },
+                { key: 'signalNodesData', name: 'signal quality nodes', url: `/api/stats/signal-quality/nodes${hoursParam}` },
+                { key: 'temporalData', name: 'delivery', url: `/api/stats/temporal${hoursParam}` },
+                { key: 'batteryData', name: 'battery', url: `/api/stats/telemetry/battery${hoursParam}` },
+                { key: 'humidityData', name: 'humidity', url: `/api/stats/telemetry/humidity${hoursParam}` },
+                { key: 'voltageData', name: 'voltage', url: `/api/stats/telemetry/voltage${hoursParam}` },
+                { key: 'topChannelUtilizersData', name: 'top channel utilizers', url: `/api/stats/top-channel-utilizers${hoursParam}` },
+                { key: 'gatewayStatusData', name: 'gateway status', url: `/gateway/api/gateways/status${hoursParam}` },
+                { key: 'hopDistributionData', name: 'hop distribution', url: `/api/stats/hop-distribution${hoursParam}` },
+                { key: 'hardwareModelsData', name: 'hardware models', url: `/api/stats/hardware-models${hoursParam}` },
+                { key: 'peakHoursData', name: 'peak hours', url: `/api/stats/peak-hours${hoursParam}` },
+                { key: 'topAirtimeAveragesData', name: 'top airtime averages', url: `/api/stats/top-airtime-nodes-6h${hoursParam}` }
+            ];
 
                 // Handle each data set with error checking
                 safeRender('renderNodeTable', `/api/stats/coldest${hoursParam}`, 'coldestNodesTable', 'coldestNodesTable', () => {
@@ -774,6 +807,7 @@
                     }
                 });
 
+            safeRender('customNamedNodes', () => {
                 if (nodeNamingData && nodeNamingData.error) {
                     reportTechnicalError(nodeNamingData.error, { type: 'runtime', endpoint: '/api/stats/node-naming', widget: 'customNamedNodes' });
                 } else {
@@ -781,7 +815,9 @@
                         renderNodeNamingStats(nodeNamingData || {});
                     });
                 }
+            });
 
+            safeRender('highlightedNodesTable', () => {
                 if (Array.isArray(highlightedNodesData)) {
                     renderHighlightedNodesTable('highlightedNodesTable', highlightedNodesData);
                 } else if (highlightedNodesData && highlightedNodesData.error) {
@@ -789,19 +825,25 @@
                 } else {
                     renderHighlightedNodesTable('highlightedNodesTable', []);
                 }
+            });
 
+            safeRender('gatewayChart', () => {
                 if (gatewayData && gatewayData.error) {
                     showError('gatewayChart', gatewayData.error);
                 } else {
                     renderGatewayChart(gatewayData || {});
                 }
+            });
 
+            safeRender('signalQualityChart', () => {
                 if (signalData && signalData.error) {
                     showError('signalQualityChart', signalData.error);
                 } else {
                     renderSignalQualityChart(signalData || {});
                 }
+            });
 
+            safeRender('signalNodesTable', () => {
                 if (Array.isArray(signalNodesData)) {
                     renderSignalNodesTable('signalNodesTable', signalNodesData);
                 } else if (signalNodesData && signalNodesData.error) {
@@ -809,13 +851,17 @@
                 } else {
                     renderSignalNodesTable('signalNodesTable', []);
                 }
+            });
 
+            safeRender('deliveryChart', () => {
                 if (temporalData && temporalData.error) {
                     showError('deliveryChart', temporalData.error);
                 } else {
                     renderDeliveryChart(temporalData || {});
                 }
+            });
 
+            safeRender('topChannelUtilizersTable', () => {
                 if (Array.isArray(topChannelUtilizersData)) {
                     renderTopChannelUtilizersTable('topChannelUtilizersTable', topChannelUtilizersData);
                 } else if (topChannelUtilizersData && Array.isArray(topChannelUtilizersData.nodes)) {
@@ -825,38 +871,50 @@
                 } else {
                     renderTopChannelUtilizersTable('topChannelUtilizersTable', []);
                 }
+            });
 
+            safeRender('gatewayStatusTable', () => {
                 if (gatewayStatusData && gatewayStatusData.error) {
                     showError('gatewayStatusTable', gatewayStatusData.error);
                 } else {
                     renderGatewayStatusTable('gatewayStatusTable', gatewayStatusData || {});
                 }
+            });
 
+            safeRender('hopDistributionChart', () => {
                 if (hopDistributionData && hopDistributionData.error) {
                     showError('hopDistributionChart', hopDistributionData.error);
                 } else {
                     renderHopDistributionChart(hopDistributionData || {});
                 }
+            });
 
+            safeRender('hardwareModelsChart', () => {
                 if (hardwareModelsData && hardwareModelsData.error) {
                     showError('hardwareModelsChart', hardwareModelsData.error);
                 } else {
                     renderHardwareModelsChart(hardwareModelsData || []);
                 }
+            });
 
+            safeRender('peakHoursChart', () => {
                 if (peakHoursData && peakHoursData.error) {
                     showError('peakHoursChart', peakHoursData.error);
                 } else {
                     renderPeakHoursChart(peakHoursData || {});
                 }
+            });
 
+            safeRender('topAirtimeAveragesTable', () => {
                 if (topAirtimeAveragesData && topAirtimeAveragesData.error) {
                     showError('topAirtimeAveragesTable', topAirtimeAveragesData.error);
                 } else {
                     renderTopAirtimeAveragesTable('topAirtimeAveragesTable', topAirtimeAveragesData?.nodes || []);
                 }
+            });
 
-                // Handle telemetry data (arrays, not objects)
+            // Handle telemetry data (arrays, not objects)
+            safeRender('batteryChart', () => {
                 if (Array.isArray(batteryData)) {
                     renderTelemetryChart('batteryChart', batteryData, 'Battery Level', '%', '#28a745');
                 } else if (batteryData && batteryData.error) {
@@ -864,7 +922,9 @@
                 } else {
                     renderTelemetryChart('batteryChart', [], 'Battery Level', '%', '#28a745');
                 }
+            });
 
+            safeRender('humidityChart', () => {
                 if (Array.isArray(humidityData)) {
                     renderTelemetryChart('humidityChart', humidityData, 'Humidity', '%', '#0dcaf0');
                 } else if (humidityData && humidityData.error) {
@@ -872,7 +932,9 @@
                 } else {
                     renderTelemetryChart('humidityChart', [], 'Humidity', '%', '#0dcaf0');
                 }
+            });
 
+            safeRender('voltageChart', () => {
                 if (Array.isArray(voltageData)) {
                     renderTelemetryChart('voltageChart', voltageData, 'Voltage', 'V', '#ffc107');
                 } else if (voltageData && voltageData.error) {
@@ -1503,6 +1565,21 @@
             }
         }
 
+        function sanitizeMetric(value, min, max) {
+            const numeric = Number(value);
+            if (!Number.isFinite(numeric)) return null;
+            if (numeric < min || numeric > max) return null;
+            return numeric;
+        }
+
+        function sanitizeRssi(value) {
+            return sanitizeMetric(value, -200, 20);
+        }
+
+        function sanitizeSnr(value) {
+            return sanitizeMetric(value, -40, 40);
+        }
+
         let highlightedNodesCache = [];
 
         function renderHighlightedNodesTable(tableId, nodes) {
@@ -1526,8 +1603,8 @@
             const sorted = highlightedNodesCache.slice();
             if (mode === 'weak_signal') {
                 sorted.sort((a, b) => {
-                    const ar = a.avg_rssi ?? 0;
-                    const br = b.avg_rssi ?? 0;
+                    const ar = sanitizeRssi(a.avg_rssi) ?? 0;
+                    const br = sanitizeRssi(b.avg_rssi) ?? 0;
                     return ar - br; // weakest (most negative) first
                 });
             } else {
@@ -1544,8 +1621,9 @@
 
                 let signalClass = 'text-muted';
                 let signalLabel = 'N/A';
-                if (node.avg_rssi !== null && node.avg_rssi !== undefined) {
-                    const rssi = node.avg_rssi;
+                const highlightedRssi = sanitizeRssi(node.avg_rssi);
+                if (highlightedRssi !== null) {
+                    const rssi = highlightedRssi;
                     if (rssi > -70) {
                         signalClass = 'text-success';
                         signalLabel = 'Excellent';
@@ -1586,7 +1664,7 @@
                 </td>
                 <td class="text-end">
                     <span class="${signalClass} small highlighted-signal-text">
-                        ${signalLabel}${node.avg_rssi !== null && node.avg_rssi !== undefined ? ` (${node.avg_rssi.toFixed(1)} dBm)` : ''}
+                        ${signalLabel}${highlightedRssi !== null ? ` (${highlightedRssi.toFixed(1)} dBm)` : ''}
                     </span>
                 </td>
             `;
@@ -1622,8 +1700,8 @@
                 const initials = displayName.substring(0, 2).toUpperCase();
                 const nodeId = node.node_id || node.id || '';
                 const packets = node.packet_count || 0;
-                const rssi = node.avg_rssi;
-                const snr = node.avg_snr;
+                const rssi = sanitizeRssi(node.avg_rssi);
+                const snr = sanitizeSnr(node.avg_snr);
 
                 let signalClass = 'bg-secondary';
                 let signalLabel = 'N/A';
@@ -1801,7 +1879,7 @@
                 const channelList = channels.length ? channels.join(', ') : 'N/A';
 
                 tr.innerHTML = `
-                <td>
+                <td class="top-channel-node-cell">
                     <div class="d-flex align-items-center">
                         <div class="node-avatar me-2" style="background-color: ${stringToColor(String(nodeId))}">
                             ${initials}
@@ -2341,20 +2419,91 @@
     .utilizer-meta-wrap,
     .highlighted-signal-text,
     .top-airtime-node-cell a,
-    .top-airtime-node-cell .small {
+    .top-airtime-node-cell .small,
+    .top-channel-node-cell {
         overflow-wrap: anywhere;
         word-break: break-word;
     }
 
+    #gatewayStatusTable,
+    #signalNodesTable,
     #hottestNodesTable,
     #coldestNodesTable,
     #highlightedNodesTable,
-    #topChannelUtilizersTable,
-    #gatewayStatusTable,
-    #signalNodesTable,
-    #topAirtimeAveragesTable {
+    #topChannelUtilizersTable {
         min-width: 100%;
         table-layout: fixed;
+    }
+
+    #topAirtimeAveragesTable {
+        min-width: 900px;
+        table-layout: fixed;
+    }
+
+    #signalNodesTable th:nth-child(1),
+    #signalNodesTable td:nth-child(1) {
+        width: 40%;
+    }
+
+    #signalNodesTable th:nth-child(2),
+    #signalNodesTable td:nth-child(2) {
+        width: 12%;
+    }
+
+    #signalNodesTable th:nth-child(3),
+    #signalNodesTable td:nth-child(3) {
+        width: 48%;
+    }
+
+    #hottestNodesTable th:nth-child(1),
+    #hottestNodesTable td:nth-child(1),
+    #coldestNodesTable th:nth-child(1),
+    #coldestNodesTable td:nth-child(1) {
+        width: 52%;
+    }
+
+    #hottestNodesTable th:nth-child(2),
+    #hottestNodesTable td:nth-child(2),
+    #coldestNodesTable th:nth-child(2),
+    #coldestNodesTable td:nth-child(2) {
+        width: 18%;
+    }
+
+    #hottestNodesTable th:nth-child(3),
+    #hottestNodesTable td:nth-child(3),
+    #coldestNodesTable th:nth-child(3),
+    #coldestNodesTable td:nth-child(3) {
+        width: 30%;
+    }
+
+    #highlightedNodesTable th:nth-child(1),
+    #highlightedNodesTable td:nth-child(1) {
+        width: 52%;
+    }
+
+    #highlightedNodesTable th:nth-child(2),
+    #highlightedNodesTable td:nth-child(2) {
+        width: 18%;
+    }
+
+    #highlightedNodesTable th:nth-child(3),
+    #highlightedNodesTable td:nth-child(3) {
+        width: 30%;
+    }
+
+    #topChannelUtilizersTable th:nth-child(1),
+    #topChannelUtilizersTable td:nth-child(1) {
+        width: 58%;
+    }
+
+    #topChannelUtilizersTable th:nth-child(2),
+    #topChannelUtilizersTable td:nth-child(2) {
+        width: 20%;
+    }
+
+    #topChannelUtilizersTable th:nth-child(3),
+    #topChannelUtilizersTable td:nth-child(3) {
+        width: 22%;
     }
 
     .gateway-info-wrap,
@@ -2364,7 +2513,7 @@
     }
 
     .signal-node-metrics-cell {
-        min-width: 220px;
+        min-width: 0;
     }
 
     .stats-table-scroll-mobile-fit {
@@ -2379,7 +2528,7 @@
         }
 
         .stats-table-scroll>table {
-            min-width: 640px;
+            min-width: 560px;
         }
 
         #topAirtimeAveragesTitle {
