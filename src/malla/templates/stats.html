@@ -355,7 +355,7 @@
 <!-- Advanced Tables -->
 <div class="row mb-4">
     <!-- Highlighted Nodes -->
-    <div class="col-lg-8 mb-4">
+    <div class="col-lg-7 mb-4">
         <div class="card shadow-sm h-100 glass-panel">
             <div class="card-header bg-transparent border-0 d-flex justify-content-between align-items-center">
                 <div>
@@ -394,7 +394,7 @@
     </div>
 
     <!-- Top Channel Utilizers -->
-    <div class="col-lg-4 mb-4">
+    <div class="col-lg-5 mb-4">
         <div class="card shadow-sm h-100 glass-panel">
             <div class="card-header bg-transparent border-0 d-flex justify-content-between align-items-center">
                 <div>
@@ -1479,6 +1479,21 @@
             }
         }
 
+        function sanitizeMetric(value, min, max) {
+            const numeric = Number(value);
+            if (!Number.isFinite(numeric)) return null;
+            if (numeric < min || numeric > max) return null;
+            return numeric;
+        }
+
+        function sanitizeRssi(value) {
+            return sanitizeMetric(value, -200, 20);
+        }
+
+        function sanitizeSnr(value) {
+            return sanitizeMetric(value, -40, 40);
+        }
+
         let highlightedNodesCache = [];
 
         function renderHighlightedNodesTable(tableId, nodes) {
@@ -1502,8 +1517,8 @@
             const sorted = highlightedNodesCache.slice();
             if (mode === 'weak_signal') {
                 sorted.sort((a, b) => {
-                    const ar = a.avg_rssi ?? 0;
-                    const br = b.avg_rssi ?? 0;
+                    const ar = sanitizeRssi(a.avg_rssi) ?? 0;
+                    const br = sanitizeRssi(b.avg_rssi) ?? 0;
                     return ar - br; // weakest (most negative) first
                 });
             } else {
@@ -1520,8 +1535,9 @@
 
                 let signalClass = 'text-muted';
                 let signalLabel = 'N/A';
-                if (node.avg_rssi !== null && node.avg_rssi !== undefined) {
-                    const rssi = node.avg_rssi;
+                const highlightedRssi = sanitizeRssi(node.avg_rssi);
+                if (highlightedRssi !== null) {
+                    const rssi = highlightedRssi;
                     if (rssi > -70) {
                         signalClass = 'text-success';
                         signalLabel = 'Excellent';
@@ -1562,7 +1578,7 @@
                 </td>
                 <td class="text-end">
                     <span class="${signalClass} small highlighted-signal-text">
-                        ${signalLabel}${node.avg_rssi !== null && node.avg_rssi !== undefined ? ` (${node.avg_rssi.toFixed(1)} dBm)` : ''}
+                        ${signalLabel}${highlightedRssi !== null ? ` (${highlightedRssi.toFixed(1)} dBm)` : ''}
                     </span>
                 </td>
             `;
@@ -1598,8 +1614,8 @@
                 const initials = displayName.substring(0, 2).toUpperCase();
                 const nodeId = node.node_id || node.id || '';
                 const packets = node.packet_count || 0;
-                const rssi = node.avg_rssi;
-                const snr = node.avg_snr;
+                const rssi = sanitizeRssi(node.avg_rssi);
+                const snr = sanitizeSnr(node.avg_snr);
 
                 let signalClass = 'bg-secondary';
                 let signalLabel = 'N/A';
@@ -1777,7 +1793,7 @@
                 const channelList = channels.length ? channels.join(', ') : 'N/A';
 
                 tr.innerHTML = `
-                <td>
+                <td class="top-channel-node-cell">
                     <div class="d-flex align-items-center">
                         <div class="node-avatar me-2" style="background-color: ${stringToColor(String(nodeId))}">
                             ${initials}
@@ -2317,20 +2333,91 @@
     .utilizer-meta-wrap,
     .highlighted-signal-text,
     .top-airtime-node-cell a,
-    .top-airtime-node-cell .small {
+    .top-airtime-node-cell .small,
+    .top-channel-node-cell {
         overflow-wrap: anywhere;
         word-break: break-word;
     }
 
+    #gatewayStatusTable,
+    #signalNodesTable,
     #hottestNodesTable,
     #coldestNodesTable,
     #highlightedNodesTable,
-    #topChannelUtilizersTable,
-    #gatewayStatusTable,
-    #signalNodesTable,
-    #topAirtimeAveragesTable {
+    #topChannelUtilizersTable {
         min-width: 100%;
         table-layout: fixed;
+    }
+
+    #topAirtimeAveragesTable {
+        min-width: 900px;
+        table-layout: fixed;
+    }
+
+    #signalNodesTable th:nth-child(1),
+    #signalNodesTable td:nth-child(1) {
+        width: 40%;
+    }
+
+    #signalNodesTable th:nth-child(2),
+    #signalNodesTable td:nth-child(2) {
+        width: 12%;
+    }
+
+    #signalNodesTable th:nth-child(3),
+    #signalNodesTable td:nth-child(3) {
+        width: 48%;
+    }
+
+    #hottestNodesTable th:nth-child(1),
+    #hottestNodesTable td:nth-child(1),
+    #coldestNodesTable th:nth-child(1),
+    #coldestNodesTable td:nth-child(1) {
+        width: 52%;
+    }
+
+    #hottestNodesTable th:nth-child(2),
+    #hottestNodesTable td:nth-child(2),
+    #coldestNodesTable th:nth-child(2),
+    #coldestNodesTable td:nth-child(2) {
+        width: 18%;
+    }
+
+    #hottestNodesTable th:nth-child(3),
+    #hottestNodesTable td:nth-child(3),
+    #coldestNodesTable th:nth-child(3),
+    #coldestNodesTable td:nth-child(3) {
+        width: 30%;
+    }
+
+    #highlightedNodesTable th:nth-child(1),
+    #highlightedNodesTable td:nth-child(1) {
+        width: 52%;
+    }
+
+    #highlightedNodesTable th:nth-child(2),
+    #highlightedNodesTable td:nth-child(2) {
+        width: 18%;
+    }
+
+    #highlightedNodesTable th:nth-child(3),
+    #highlightedNodesTable td:nth-child(3) {
+        width: 30%;
+    }
+
+    #topChannelUtilizersTable th:nth-child(1),
+    #topChannelUtilizersTable td:nth-child(1) {
+        width: 58%;
+    }
+
+    #topChannelUtilizersTable th:nth-child(2),
+    #topChannelUtilizersTable td:nth-child(2) {
+        width: 20%;
+    }
+
+    #topChannelUtilizersTable th:nth-child(3),
+    #topChannelUtilizersTable td:nth-child(3) {
+        width: 22%;
     }
 
     .gateway-info-wrap,
@@ -2340,7 +2427,7 @@
     }
 
     .signal-node-metrics-cell {
-        min-width: 220px;
+        min-width: 0;
     }
 
     .stats-table-scroll-mobile-fit {
@@ -2355,7 +2442,7 @@
         }
 
         .stats-table-scroll>table {
-            min-width: 640px;
+            min-width: 560px;
         }
 
         #topAirtimeAveragesTitle {
