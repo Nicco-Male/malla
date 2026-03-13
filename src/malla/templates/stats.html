@@ -1771,26 +1771,28 @@
                 return;
             }
 
-            nodes.forEach(node => {
+            nodes.forEach((node) => {
+                const safeNode = node || {};
                 const tr = document.createElement('tr');
 
                 let lastSeen = 'Unknown';
-                if (node.last_seen) {
-                    lastSeen = formatRelativeTime(node.last_seen);
+                if (safeNode.last_seen) {
+                    lastSeen = formatRelativeTime(safeNode.last_seen);
                 }
 
-                const displayName = node.display_name || node.name || `Node ${node.node_id || 'Unknown'}`;
+                const displayName = safeNode.display_name || safeNode.name || `Node ${safeNode.node_id || 'Unknown'}`;
                 const initials = displayName.substring(0, 2).toUpperCase();
-                const nodeId = node.node_id || node.id || '';
+                const nodeId = safeNode.node_id || safeNode.id || '';
+                const temperature = Number.isFinite(Number(safeNode.temperature)) ? Number(safeNode.temperature) : null;
 
                 // Determine temperature badge color
                 let tempBadgeClass = 'bg-secondary';
-                if (node.temperature !== undefined) {
-                    if (node.temperature >= 25) {
+                if (temperature !== null) {
+                    if (temperature >= 25) {
                         tempBadgeClass = 'bg-danger';
-                    } else if (node.temperature >= 15) {
+                    } else if (temperature >= 15) {
                         tempBadgeClass = 'bg-warning';
-                    } else if (node.temperature >= 0) {
+                    } else if (temperature >= 0) {
                         tempBadgeClass = 'bg-info';
                     } else {
                         tempBadgeClass = 'bg-primary';
@@ -1809,14 +1811,14 @@
                                     ${displayName}
                                 </a>
                             </div>
-                            <div class="small text-muted node-meta-wrap">${node.hw_model || 'Unknown Node'}</div>
+                            <div class="small text-muted node-meta-wrap">${safeNode.hw_model || 'Unknown Node'}</div>
                         </div>
                     </div>
                 </td>
                 <td class="text-center">
-                    ${node.temperature !== undefined ?
+                    ${temperature !== null ?
                         `<span class="badge ${tempBadgeClass} text-white border">
-                            ${node.temperature.toFixed(1)}°C
+                            ${temperature.toFixed(1)}°C
                         </span>` :
                         '<span class="badge bg-secondary text-white border">N/A</span>'
                     }
