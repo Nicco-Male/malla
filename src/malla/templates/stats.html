@@ -1491,7 +1491,7 @@
                     </span>
                 </td>
                 <td class="text-end">
-                    <span class="${signalClass} small">
+                    <span class="${signalClass} small highlighted-signal-text">
                         ${signalLabel}${node.avg_rssi !== null && node.avg_rssi !== undefined ? ` (${node.avg_rssi.toFixed(1)} dBm)` : ''}
                     </span>
                 </td>
@@ -1563,12 +1563,12 @@
                             ${initials}
                         </div>
                         <div>
-                            <div class="fw-bold text-truncate" style="max-width: 180px;">
+                            <div class="fw-bold">
                                 <a href="/node/${nodeId}" class="text-decoration-none text-body">
                                     ${displayName}
                                 </a>
                             </div>
-                            <div class="small text-muted text-truncate" style="max-width: 200px;">
+                            <div class="small text-muted node-meta-wrap">
                                 ${node.hw_model || 'Unknown Node'}
                             </div>
                         </div>
@@ -1660,12 +1660,12 @@
                             ${initials}
                         </div>
                         <div>
-                            <div class="fw-bold text-truncate" style="max-width: 150px;">
+                            <div class="fw-bold">
                                 <a href="/node/${nodeId}" class="text-decoration-none text-body">
                                     ${displayName}
                                 </a>
                             </div>
-                            <div class="small text-muted">${node.hw_model || 'Unknown Node'}</div>
+                            <div class="small text-muted node-meta-wrap">${node.hw_model || 'Unknown Node'}</div>
                         </div>
                     </div>
                 </td>
@@ -1717,12 +1717,12 @@
                             ${initials}
                         </div>
                         <div>
-                            <div class="fw-bold text-truncate" style="max-width: 200px;">
+                            <div class="fw-bold">
                                 <a href="/node/${nodeId}" class="text-decoration-none text-body">
                                     ${displayName}
                                 </a>
                             </div>
-                            <div class="small text-muted text-truncate" style="max-width: 220px;">
+                            <div class="small text-muted utilizer-meta-wrap">
                                 Channels: ${channelList}
                             </div>
                         </div>
@@ -1766,7 +1766,7 @@
                 const bucketLabel = bucketCount === 1 ? 'bucket' : 'buckets';
 
                 tr.innerHTML = `
-                <td>
+                <td class="top-airtime-node-cell">
                     <a href="/node/${nodeId}" class="text-decoration-none text-body fw-semibold">${displayName}</a>
                     <div class="small text-muted">${node.hw_model || 'Unknown Node'} • ${bucketCount} ${bucketLabel}</div>
                 </td>
@@ -2247,19 +2247,22 @@
         min-width: 100%;
     }
 
+    .node-meta-wrap,
+    .utilizer-meta-wrap,
+    .highlighted-signal-text,
+    .top-airtime-node-cell a,
+    .top-airtime-node-cell .small {
+        overflow-wrap: anywhere;
+        word-break: break-word;
+    }
+
     #hottestNodesTable,
     #coldestNodesTable,
-    #topChannelUtilizersTable {
-        min-width: 700px;
-    }
-
     #highlightedNodesTable,
-    #signalNodesTable {
-        min-width: 760px;
-    }
-
+    #topChannelUtilizersTable,
     #gatewayStatusTable,
-    #signalNodesTable {
+    #signalNodesTable,
+    #topAirtimeAveragesTable {
         min-width: 100%;
         table-layout: fixed;
     }
@@ -2272,10 +2275,6 @@
 
     .signal-node-metrics-cell {
         min-width: 220px;
-    }
-
-    #topAirtimeAveragesTable {
-        min-width: 900px;
     }
 
     .stats-table-scroll-mobile-fit {
@@ -2338,18 +2337,7 @@
             min-width: 0;
         }
 
-        .top-airtime-table tbody td:first-child a {
-            display: block;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            white-space: nowrap;
-        }
 
-        .top-airtime-table tbody td:first-child .small {
-            overflow: hidden;
-            text-overflow: ellipsis;
-            white-space: nowrap;
-        }
 
         #topAirtimeAveragesTable {
             min-width: 0;
