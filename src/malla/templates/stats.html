@@ -1702,20 +1702,20 @@
                 const rssi = sanitizeRssi(node.avg_rssi);
                 const snr = sanitizeSnr(node.avg_snr);
 
-                let signalClass = 'bg-secondary';
+                let signalClass = 'signal-quality-na';
                 let signalLabel = 'N/A';
                 if (rssi !== null && rssi !== undefined) {
                     if (rssi > -70) {
-                        signalClass = 'bg-success';
+                        signalClass = 'signal-quality-excellent';
                         signalLabel = 'Excellent';
                     } else if (rssi > -80) {
-                        signalClass = 'bg-warning';
+                        signalClass = 'signal-quality-good';
                         signalLabel = 'Good';
                     } else if (rssi > -90) {
-                        signalClass = 'bg-info';
+                        signalClass = 'signal-quality-fair';
                         signalLabel = 'Fair';
                     } else {
-                        signalClass = 'bg-danger';
+                        signalClass = 'signal-quality-poor';
                         signalLabel = 'Poor';
                     }
                 }
@@ -1751,16 +1751,20 @@
                     </span>
                 </td>
                 <td class="text-end signal-node-metrics-cell">
-                    <div class="d-flex flex-column align-items-end gap-1">
+                    <div class="d-flex flex-column align-items-end gap-1 signal-node-signal-wrap">
+                        <span class="signal-quality-pill ${signalClass}">
+                            <span class="signal-quality-dot"></span>
+                            ${signalLabel}
+                        </span>
                         <div class="progress signal-node-gauge" style="height: 0.5rem;">
                             <div class="progress-bar ${signalClass}" role="progressbar"
                                  style="width: ${gaugeValue}%;"
                                  aria-valuenow="${gaugeValue}" aria-valuemin="0" aria-valuemax="100">
                             </div>
                         </div>
-                        <div class="small text-muted signal-node-metrics-text">
-                            ${signalLabel}${rssi !== null && rssi !== undefined ? ` • R ${rssi.toFixed(1)} dBm` : ''}
-                            ${snr !== null && snr !== undefined ? ` • S ${snr.toFixed(1)} dB` : ''}
+                        <div class="small text-muted signal-node-metrics-text d-flex justify-content-end flex-wrap gap-1">
+                            ${rssi !== null && rssi !== undefined ? `<span class="signal-metric-chip">R ${rssi.toFixed(1)} dBm</span>` : ''}
+                            ${snr !== null && snr !== undefined ? `<span class="signal-metric-chip">S ${snr.toFixed(1)} dB</span>` : ''}
                         </div>
                     </div>
                 </td>
@@ -2517,9 +2521,76 @@
         min-width: 0;
     }
 
+    .signal-node-signal-wrap {
+        min-width: 0;
+    }
+
+    .signal-quality-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.35rem;
+        padding: 0.15rem 0.55rem;
+        border-radius: 999px;
+        font-size: 0.75rem;
+        font-weight: 600;
+        line-height: 1;
+        border: 1px solid transparent;
+    }
+
+    .signal-quality-dot {
+        width: 0.42rem;
+        height: 0.42rem;
+        border-radius: 50%;
+        background: currentColor;
+        opacity: 0.95;
+    }
+
     .signal-node-gauge {
         width: min(100%, 14rem);
         margin-left: auto;
+        background-color: rgba(148, 163, 184, 0.25);
+    }
+
+    .signal-node-gauge .progress-bar {
+        min-width: 0.35rem;
+    }
+
+    .signal-metric-chip {
+        display: inline-flex;
+        align-items: center;
+        border-radius: 0.35rem;
+        padding: 0.08rem 0.35rem;
+        background-color: rgba(148, 163, 184, 0.15);
+    }
+
+    .signal-quality-excellent {
+        color: #10b981;
+        background-color: rgba(16, 185, 129, 0.16);
+        border-color: rgba(16, 185, 129, 0.35);
+    }
+
+    .signal-quality-good {
+        color: #84cc16;
+        background-color: rgba(132, 204, 22, 0.15);
+        border-color: rgba(132, 204, 22, 0.35);
+    }
+
+    .signal-quality-fair {
+        color: #f59e0b;
+        background-color: rgba(245, 158, 11, 0.18);
+        border-color: rgba(245, 158, 11, 0.4);
+    }
+
+    .signal-quality-poor {
+        color: #fb7185;
+        background-color: rgba(251, 113, 133, 0.16);
+        border-color: rgba(251, 113, 133, 0.35);
+    }
+
+    .signal-quality-na {
+        color: #94a3b8;
+        background-color: rgba(148, 163, 184, 0.16);
+        border-color: rgba(148, 163, 184, 0.35);
     }
 
     .stats-table-scroll-mobile-fit {
@@ -2582,9 +2653,14 @@
         }
 
         #signalNodesTable .signal-node-metrics-text {
-            font-size: 0.82rem;
+            font-size: 0.8rem;
             line-height: 1.15;
             text-align: right;
+        }
+
+        #signalNodesTable .signal-quality-pill {
+            font-size: 0.7rem;
+            padding: 0.12rem 0.42rem;
         }
 
         #signalNodesTable .signal-node-gauge {
