@@ -534,7 +534,7 @@
         let currentHours = 6;
         const chartInstances = {};
         const relativeTimeFormatter = new Intl.RelativeTimeFormat(document.documentElement.lang || navigator.language || 'en', { numeric: 'auto' });
-        const REQUEST_TIMEOUT_MS = 12000;
+        const REQUEST_TIMEOUT_MS = 60000;
         const computedStyle = getComputedStyle(document.documentElement);
         const palette = {
             primary: computedStyle.getPropertyValue('--bs-primary').trim(),
