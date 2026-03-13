@@ -37,6 +37,7 @@ import os
 import socket
 import threading
 import time
+from numbers import Number
 from typing import Any
 
 import paho.mqtt.client as mqtt
@@ -233,7 +234,8 @@ def _init_metrics():
         MQTT_CONSUMER_LAG, \
         TOPIC_PACKETS_SUCCESS, \
         TOPIC_PACKETS_ERROR, \
-        PACKETS_IGNORED
+        PACKETS_IGNORED, \
+        INVALID_SIGNAL_METRIC_TOTAL
 
     if _metrics_registered:
         return
@@ -284,6 +286,11 @@ def _init_metrics():
     PACKETS_IGNORED = Counter(
         "malla_packets_ignored_total",
         "Packets dropped from ignored node IDs",
+    )
+    INVALID_SIGNAL_METRIC_TOTAL = Counter(
+        "malla_invalid_signal_metric_total",
+        "Packets with out-of-range RSSI/SNR values",
+        ["signal_type"],
     )
 
     _metrics_registered = True
@@ -718,6 +725,12 @@ def log_packet_to_database(
     current_time = time.time()
     db_commit_time = current_time
 
+    def _safe_float(value: Any) -> float | None:
+        """Safely convert numeric values to float, otherwise return None."""
+        if isinstance(value, Number):
+            return float(value)
+        return None
+
     from_node_id = getattr(mesh_packet, "from", None) if mesh_packet else None
     to_node_id = getattr(mesh_packet, "to", None) if mesh_packet else None
     mesh_packet_id = getattr(mesh_packet, "id", None) if mesh_packet else None
@@ -733,16 +746,18 @@ def log_packet_to_database(
     channel_id = (
         getattr(service_envelope, "channel_id", None) if service_envelope else None
     )
-    rssi = (
+    rssi_raw = (
         getattr(mesh_packet, "rx_rssi", None)
         if mesh_packet and hasattr(mesh_packet, "rx_rssi")
         else None
     )
-    snr = (
+    snr_raw = (
         getattr(mesh_packet, "rx_snr", None)
         if mesh_packet and hasattr(mesh_packet, "rx_snr")
         else None
     )
+    rssi = _safe_float(rssi_raw)
+    snr = _safe_float(snr_raw)
     hop_limit = getattr(mesh_packet, "hop_limit", None) if mesh_packet else None
     hop_start = getattr(mesh_packet, "hop_start", None) if mesh_packet else None
     payload_length = (
@@ -780,6 +795,36 @@ def log_packet_to_database(
     next_hop = getattr(mesh_packet, "next_hop", None) if mesh_packet else None
     relay_node = getattr(mesh_packet, "relay_node", None) if mesh_packet else None
     tx_after = getattr(mesh_packet, "tx_after", None) if mesh_packet else None
+
+    if rssi is not None and (rssi < -200 or rssi > 20):
+        logging.warning(
+            "Out-of-range RSSI detected before packet_history insert "
+            "(from_node_id=%s, mesh_packet_id=%s, gateway_id=%s, raw_rssi=%r, raw_snr=%r)",
+            from_node_id,
+            mesh_packet_id,
+            gateway_id,
+            rssi_raw,
+            snr_raw,
+        )
+        try:
+            INVALID_SIGNAL_METRIC_TOTAL.labels(signal_type="rssi").inc()
+        except Exception:
+            pass
+
+    if snr is not None and (snr < -40 or snr > 40):
+        logging.warning(
+            "Out-of-range SNR detected before packet_history insert "
+            "(from_node_id=%s, mesh_packet_id=%s, gateway_id=%s, raw_rssi=%r, raw_snr=%r)",
+            from_node_id,
+            mesh_packet_id,
+            gateway_id,
+            rssi_raw,
+            snr_raw,
+        )
+        try:
+            INVALID_SIGNAL_METRIC_TOTAL.labels(signal_type="snr").inc()
+        except Exception:
+            pass
 
     channel_utilization = None
     air_util_tx = None
