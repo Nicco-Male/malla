@@ -659,6 +659,16 @@
 
         async function loadStats() {
             const hoursParam = `?hours=${currentHours}`;
+            const runSection = (sectionId, sectionName, renderFn) => {
+                try {
+                    renderFn();
+                } catch (error) {
+                    const message = error?.message || 'Unknown rendering error';
+                    console.error(`Failed to render ${sectionName}: ${message}`);
+                    showError(sectionId, `Unable to render ${sectionName}: ${message}`);
+                }
+            };
+
             try {
                 console.log('Loading stats data...');
                 const endpoints = [
@@ -715,142 +725,198 @@
                 if (hottestData && hottestData.error) {
                     showError('hottestNodesTable', hottestData.error);
                 } else {
-                    renderNodeTable('hottestNodesTable', Array.isArray(hottestData) ? hottestData : (hottestData?.nodes || hottestData || []));
+                    runSection('hottestNodesTable', 'hottest nodes', () => {
+                        renderNodeTable('hottestNodesTable', Array.isArray(hottestData) ? hottestData : (hottestData?.nodes || hottestData || []));
+                    });
                 }
 
                 if (coldestData && coldestData.error) {
                     showError('coldestNodesTable', coldestData.error);
                 } else {
-                    renderNodeTable('coldestNodesTable', Array.isArray(coldestData) ? coldestData : (coldestData?.nodes || coldestData || []));
+                    runSection('coldestNodesTable', 'coldest nodes', () => {
+                        renderNodeTable('coldestNodesTable', Array.isArray(coldestData) ? coldestData : (coldestData?.nodes || coldestData || []));
+                    });
                 }
 
                 if (utilData && utilData.error) {
                     showError('utilizationChart', utilData.error);
                 } else {
-                    renderUtilizationChart(utilData || {});
+                    runSection('utilizationChart', 'channel utilization chart', () => {
+                        renderUtilizationChart(utilData || {});
+                    });
                 }
 
                 if (packetTypesData && packetTypesData.error) {
                     showError('packetTypesChart', packetTypesData.error);
                 } else {
-                    renderPacketTypesChart(packetTypesData || {});
+                    runSection('packetTypesChart', 'packet types chart', () => {
+                        renderPacketTypesChart(packetTypesData || {});
+                    });
                 }
 
                 if (channelsData && channelsData.error) {
                     showError('channelsChart', channelsData.error);
                 } else {
-                    renderChannelsChart(channelsData || {});
+                    runSection('channelsChart', 'channels chart', () => {
+                        renderChannelsChart(channelsData || {});
+                    });
                 }
 
                 if (healthData && healthData.error) {
                     showError('networkOverview', healthData.error);
                 } else {
-                    renderNetworkHealth(healthData || {});
+                    runSection('networkOverview', 'network health overview', () => {
+                        renderNetworkHealth(healthData || {});
+                    });
                 }
 
                 if (nodeNamingData && nodeNamingData.error) {
                     console.error('Failed to load node naming stats:', nodeNamingData.error);
                 } else {
-                    renderNodeNamingStats(nodeNamingData || {});
+                    runSection('customNamedNodes', 'node naming stats', () => {
+                        renderNodeNamingStats(nodeNamingData || {});
+                    });
                 }
 
                 if (Array.isArray(highlightedNodesData)) {
-                    renderHighlightedNodesTable('highlightedNodesTable', highlightedNodesData);
+                    runSection('highlightedNodesTable', 'highlighted nodes table', () => {
+                        renderHighlightedNodesTable('highlightedNodesTable', highlightedNodesData);
+                    });
                 } else if (highlightedNodesData && highlightedNodesData.error) {
                     showError('highlightedNodesTable', highlightedNodesData.error);
                 } else {
-                    renderHighlightedNodesTable('highlightedNodesTable', []);
+                    runSection('highlightedNodesTable', 'highlighted nodes table', () => {
+                        renderHighlightedNodesTable('highlightedNodesTable', []);
+                    });
                 }
 
                 if (gatewayData && gatewayData.error) {
                     showError('gatewayChart', gatewayData.error);
                 } else {
-                    renderGatewayChart(gatewayData || {});
+                    runSection('gatewayChart', 'gateway chart', () => {
+                        renderGatewayChart(gatewayData || {});
+                    });
                 }
 
                 if (signalData && signalData.error) {
                     showError('signalQualityChart', signalData.error);
                 } else {
-                    renderSignalQualityChart(signalData || {});
+                    runSection('signalQualityChart', 'signal quality chart', () => {
+                        renderSignalQualityChart(signalData || {});
+                    });
                 }
 
                 if (Array.isArray(signalNodesData)) {
-                    renderSignalNodesTable('signalNodesTable', signalNodesData);
+                    runSection('signalNodesTable', 'signal quality nodes table', () => {
+                        renderSignalNodesTable('signalNodesTable', signalNodesData);
+                    });
                 } else if (signalNodesData && signalNodesData.error) {
                     showError('signalNodesTable', signalNodesData.error);
                 } else {
-                    renderSignalNodesTable('signalNodesTable', []);
+                    runSection('signalNodesTable', 'signal quality nodes table', () => {
+                        renderSignalNodesTable('signalNodesTable', []);
+                    });
                 }
 
                 if (temporalData && temporalData.error) {
                     showError('deliveryChart', temporalData.error);
                 } else {
-                    renderDeliveryChart(temporalData || {});
+                    runSection('deliveryChart', 'delivery chart', () => {
+                        renderDeliveryChart(temporalData || {});
+                    });
                 }
 
                 if (Array.isArray(topChannelUtilizersData)) {
-                    renderTopChannelUtilizersTable('topChannelUtilizersTable', topChannelUtilizersData);
+                    runSection('topChannelUtilizersTable', 'top channel utilizers table', () => {
+                        renderTopChannelUtilizersTable('topChannelUtilizersTable', topChannelUtilizersData);
+                    });
                 } else if (topChannelUtilizersData && Array.isArray(topChannelUtilizersData.nodes)) {
-                    renderTopChannelUtilizersTable('topChannelUtilizersTable', topChannelUtilizersData.nodes);
+                    runSection('topChannelUtilizersTable', 'top channel utilizers table', () => {
+                        renderTopChannelUtilizersTable('topChannelUtilizersTable', topChannelUtilizersData.nodes);
+                    });
                 } else if (topChannelUtilizersData && topChannelUtilizersData.error) {
                     showError('topChannelUtilizersTable', topChannelUtilizersData.error);
                 } else {
-                    renderTopChannelUtilizersTable('topChannelUtilizersTable', []);
+                    runSection('topChannelUtilizersTable', 'top channel utilizers table', () => {
+                        renderTopChannelUtilizersTable('topChannelUtilizersTable', []);
+                    });
                 }
 
                 if (gatewayStatusData && gatewayStatusData.error) {
                     showError('gatewayStatusTable', gatewayStatusData.error);
                 } else {
-                    renderGatewayStatusTable('gatewayStatusTable', gatewayStatusData || {});
+                    runSection('gatewayStatusTable', 'gateway status table', () => {
+                        renderGatewayStatusTable('gatewayStatusTable', gatewayStatusData || {});
+                    });
                 }
 
                 if (hopDistributionData && hopDistributionData.error) {
                     showError('hopDistributionChart', hopDistributionData.error);
                 } else {
-                    renderHopDistributionChart(hopDistributionData || {});
+                    runSection('hopDistributionChart', 'hop distribution chart', () => {
+                        renderHopDistributionChart(hopDistributionData || {});
+                    });
                 }
 
                 if (hardwareModelsData && hardwareModelsData.error) {
                     showError('hardwareModelsChart', hardwareModelsData.error);
                 } else {
-                    renderHardwareModelsChart(hardwareModelsData || []);
+                    runSection('hardwareModelsChart', 'hardware models chart', () => {
+                        renderHardwareModelsChart(hardwareModelsData || []);
+                    });
                 }
 
                 if (peakHoursData && peakHoursData.error) {
                     showError('peakHoursChart', peakHoursData.error);
                 } else {
-                    renderPeakHoursChart(peakHoursData || {});
+                    runSection('peakHoursChart', 'peak hours chart', () => {
+                        renderPeakHoursChart(peakHoursData || {});
+                    });
                 }
 
                 if (topAirtimeAveragesData && topAirtimeAveragesData.error) {
                     showError('topAirtimeAveragesTable', topAirtimeAveragesData.error);
                 } else {
-                    renderTopAirtimeAveragesTable('topAirtimeAveragesTable', topAirtimeAveragesData?.nodes || []);
+                    runSection('topAirtimeAveragesTable', 'top airtime averages table', () => {
+                        renderTopAirtimeAveragesTable('topAirtimeAveragesTable', topAirtimeAveragesData?.nodes || []);
+                    });
                 }
 
                 // Handle telemetry data (arrays, not objects)
                 if (Array.isArray(batteryData)) {
-                    renderTelemetryChart('batteryChart', batteryData, 'Battery Level', '%', '#28a745');
+                    runSection('batteryChart', 'battery telemetry chart', () => {
+                        renderTelemetryChart('batteryChart', batteryData, 'Battery Level', '%', '#28a745');
+                    });
                 } else if (batteryData && batteryData.error) {
                     showError('batteryChart', batteryData.error);
                 } else {
-                    renderTelemetryChart('batteryChart', [], 'Battery Level', '%', '#28a745');
+                    runSection('batteryChart', 'battery telemetry chart', () => {
+                        renderTelemetryChart('batteryChart', [], 'Battery Level', '%', '#28a745');
+                    });
                 }
 
                 if (Array.isArray(humidityData)) {
-                    renderTelemetryChart('humidityChart', humidityData, 'Humidity', '%', '#0dcaf0');
+                    runSection('humidityChart', 'humidity telemetry chart', () => {
+                        renderTelemetryChart('humidityChart', humidityData, 'Humidity', '%', '#0dcaf0');
+                    });
                 } else if (humidityData && humidityData.error) {
                     showError('humidityChart', humidityData.error);
                 } else {
-                    renderTelemetryChart('humidityChart', [], 'Humidity', '%', '#0dcaf0');
+                    runSection('humidityChart', 'humidity telemetry chart', () => {
+                        renderTelemetryChart('humidityChart', [], 'Humidity', '%', '#0dcaf0');
+                    });
                 }
 
                 if (Array.isArray(voltageData)) {
-                    renderTelemetryChart('voltageChart', voltageData, 'Voltage', 'V', '#ffc107');
+                    runSection('voltageChart', 'voltage telemetry chart', () => {
+                        renderTelemetryChart('voltageChart', voltageData, 'Voltage', 'V', '#ffc107');
+                    });
                 } else if (voltageData && voltageData.error) {
                     showError('voltageChart', voltageData.error);
                 } else {
-                    renderTelemetryChart('voltageChart', [], 'Voltage', 'V', '#ffc107');
+                    runSection('voltageChart', 'voltage telemetry chart', () => {
+                        renderTelemetryChart('voltageChart', [], 'Voltage', 'V', '#ffc107');
+                    });
                 }
             } catch (error) {
                 console.error('Error loading stats:', error);
