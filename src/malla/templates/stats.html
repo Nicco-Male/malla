@@ -657,6 +657,27 @@
             subtitle.textContent = `Ranking telemetry per media nei bucket temporali (1h) di channel_utilization e air_util_tx (${currentHours}h)`;
         }
 
+
+        function extractNodesPayload(data) {
+            if (Array.isArray(data)) return data;
+            if (Array.isArray(data?.nodes)) return data.nodes;
+            return [];
+        }
+
+        function sanitizeTemperatureNodes(nodes, { allowZero = false } = {}) {
+            if (!Array.isArray(nodes)) return [];
+
+            return nodes
+                .map((node) => {
+                    const rawTemperature = Number(node?.temperature);
+                    if (!Number.isFinite(rawTemperature)) return null;
+                    // Some devices report 0°C as sentinel/default value (invalid telemetry).
+                    if (!allowZero && rawTemperature === 0) return null;
+                    return { ...(node || {}), temperature: rawTemperature };
+                })
+                .filter(Boolean);
+        }
+
         async function loadStats() {
             const hoursParam = `?hours=${currentHours}`;
             const runSection = (sectionId, sectionName, renderFn) => {
@@ -726,7 +747,8 @@
                     showError('hottestNodesTable', hottestData.error);
                 } else {
                     runSection('hottestNodesTable', 'hottest nodes', () => {
-                        renderNodeTable('hottestNodesTable', Array.isArray(hottestData) ? hottestData : (hottestData?.nodes || hottestData || []));
+                        const hottestNodes = sanitizeTemperatureNodes(extractNodesPayload(hottestData));
+                        renderNodeTable('hottestNodesTable', hottestNodes);
                     });
                 }
 
@@ -734,7 +756,8 @@
                     showError('coldestNodesTable', coldestData.error);
                 } else {
                     runSection('coldestNodesTable', 'coldest nodes', () => {
-                        renderNodeTable('coldestNodesTable', Array.isArray(coldestData) ? coldestData : (coldestData?.nodes || coldestData || []));
+                        const coldestNodes = sanitizeTemperatureNodes(extractNodesPayload(coldestData));
+                        renderNodeTable('coldestNodesTable', coldestNodes);
                     });
                 }
 
