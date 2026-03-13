@@ -1913,8 +1913,8 @@
                     <span class="badge bg-info text-white border top-channel-count-badge">${channelCount}</span>
                 </td>
                 <td class="text-end top-channel-packets-cell">
-                    <div class="d-flex align-items-center justify-content-end gap-2">
-                        <span class="fw-semibold">${packetCount.toLocaleString()}</span>
+                    <div class="d-flex flex-column align-items-end gap-1 top-channel-packets-wrap">
+                        <span class="fw-semibold top-channel-packets-value">${packetCount.toLocaleString()}</span>
                         <div class="progress top-channel-packets-progress" role="progressbar"
                              aria-label="Packet volume"
                              aria-valuenow="${packetsRatio}" aria-valuemin="0" aria-valuemax="100">
@@ -2517,12 +2517,12 @@
 
     #topChannelUtilizersTable th:nth-child(1),
     #topChannelUtilizersTable td:nth-child(1) {
-        width: 56%;
+        width: 60%;
     }
 
     #topChannelUtilizersTable th:nth-child(2),
     #topChannelUtilizersTable td:nth-child(2) {
-        width: 18%;
+        width: 14%;
     }
 
     #topChannelUtilizersTable th:nth-child(3),
@@ -2573,11 +2573,23 @@
         padding-bottom: 0.55rem;
     }
 
+    .top-channel-packets-wrap {
+        min-width: 0;
+    }
+
+    .top-channel-packets-value {
+        line-height: 1;
+    }
+
     .top-channel-packets-progress {
-        width: clamp(4.5rem, 24vw, 10rem);
-        height: 0.32rem;
-        background: rgba(13, 110, 253, 0.18);
-        margin-bottom: 0.05rem;
+        width: min(100%, 8.5rem);
+        height: 0.38rem;
+        margin-left: auto;
+        background-color: rgba(148, 163, 184, 0.25);
+    }
+
+    .top-channel-packets-progress .progress-bar {
+        min-width: 0.3rem;
     }
 
     @media (max-width: 991.98px) {
@@ -2586,7 +2598,7 @@
         }
 
         .top-channel-packets-progress {
-            width: 4.5rem;
+            width: min(100%, 6rem);
         }
     }
 
