@@ -1652,12 +1652,38 @@ document.addEventListener('DOMContentLoaded', function() {
             url.searchParams.set('bucket', bucketValue);
         }
 
+        const summarizeErrorMessage = (message, fallback = 'Request failed') => {
+            if (typeof message !== 'string') {
+                return fallback;
+            }
+            const firstLine = message.split(/\r?\n/).map(line => line.trim()).find(Boolean);
+            if (!firstLine || firstLine.toLowerCase().includes('traceback')) {
+                return fallback;
+            }
+            return firstLine.length > 200 ? `${firstLine.slice(0, 197)}...` : firstLine;
+        };
+
         try {
             const response = await fetch(url.toString());
-            const data = await response.json();
+            const responseText = await response.text();
+            let data;
 
-            if (!response.ok || data.error) {
-                throw new Error(data.error || 'Failed to load telemetry history');
+            try {
+                data = responseText ? JSON.parse(responseText) : {};
+            } catch (jsonError) {
+                throw new Error(`Invalid JSON response while loading telemetry history (HTTP ${response.status}).`);
+            }
+
+            if (!response.ok) {
+                const errorMessage = summarizeErrorMessage(
+                    data && data.error ? data.error : response.statusText,
+                    'HTTP error'
+                );
+                throw new Error(`HTTP ${response.status}: ${errorMessage}`);
+            }
+
+            if (data.error) {
+                throw new Error(summarizeErrorMessage(data.error, 'Telemetry API error'));
             }
 
             updateTelemetryStats(data.stats || {}, data.metric_availability || {});
@@ -1896,7 +1922,7 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         } catch (error) {
             console.error('Error loading telemetry history:', error);
-            showTelemetryMessage('Error loading telemetry history.');
+            showTelemetryMessage(`Error loading telemetry history: ${error.message}`);
             updateTelemetryStats({});
         }
     }
