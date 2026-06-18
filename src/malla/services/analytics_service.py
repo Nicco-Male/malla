@@ -37,6 +37,40 @@ class AnalyticsService:
         return raw_voltage / 1000.0 if raw_voltage > 100 else raw_voltage
 
     @staticmethod
+    def _protobuf_field_value(message: Any, field_name: str) -> float | None:
+        """Return a numeric protobuf field only when it is explicitly populated."""
+        try:
+            has_field = message.HasField(field_name)
+        except (AttributeError, ValueError):
+            has_field = hasattr(message, field_name)
+
+        if not has_field:
+            return None
+
+        value = getattr(message, field_name, None)
+        if value is None:
+            return None
+
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return None
+
+    @staticmethod
+    def _extract_power_metrics_voltage(power_metrics: Any) -> float | None:
+        """Extract voltage from power metrics channel voltage fields.
+
+        Some nodes with INA/current sensors do not populate device_metrics.voltage
+        and instead report voltage under power_metrics.ch*_voltage. Use the first
+        positive channel voltage as a fallback for the node voltage series.
+        """
+        for field_name in ("ch1_voltage", "ch2_voltage", "ch3_voltage"):
+            value = AnalyticsService._protobuf_field_value(power_metrics, field_name)
+            if value is not None and value > 0:
+                return AnalyticsService._normalize_voltage(value)
+        return None
+
+    @staticmethod
     def _decode_telemetry_payload(
         raw_payload: bytes | memoryview,
     ) -> dict[str, float]:
@@ -80,6 +114,13 @@ class AnalyticsService:
                 metrics["voltage"] = AnalyticsService._normalize_voltage(
                     float(device_metrics.voltage)
                 )
+
+        if "voltage" not in metrics and telemetry.HasField("power_metrics"):
+            voltage = AnalyticsService._extract_power_metrics_voltage(
+                telemetry.power_metrics
+            )
+            if voltage is not None:
+                metrics["voltage"] = voltage
 
         return metrics
 
@@ -1181,13 +1222,16 @@ class AnalyticsService:
                         device_metrics = telemetry.device_metrics
                         if device_metrics.HasField("battery_level"):
                             metric_value = device_metrics.battery_level
-                    elif metric_type == "voltage" and telemetry.HasField(
-                        "device_metrics"
-                    ):
-                        device_metrics = telemetry.device_metrics
-                        if device_metrics.HasField("voltage"):
-                            metric_value = AnalyticsService._normalize_voltage(
-                                float(device_metrics.voltage)
+                    elif metric_type == "voltage":
+                        if telemetry.HasField("device_metrics"):
+                            device_metrics = telemetry.device_metrics
+                            if device_metrics.HasField("voltage"):
+                                metric_value = AnalyticsService._normalize_voltage(
+                                    float(device_metrics.voltage)
+                                )
+                        if metric_value is None and telemetry.HasField("power_metrics"):
+                            metric_value = AnalyticsService._extract_power_metrics_voltage(
+                                telemetry.power_metrics
                             )
                     elif metric_type == "humidity" and telemetry.HasField(
                         "environment_metrics"
