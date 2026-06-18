@@ -1176,12 +1176,12 @@ document.addEventListener('DOMContentLoaded', function() {
         { key: 'pressure', label: 'Pressure', unit: 'hPa', color: palette.primary, decimals: 1, axis: 'yMain' },
         { key: 'battery_level', label: 'Battery', unit: '%', color: palette.success, decimals: 0, axis: 'yMain' },
         { key: 'voltage', label: 'Voltage', unit: 'V', color: palette.warning, decimals: 2, axis: 'yVoltage' },
-        { key: 'ch1_voltage', label: 'CH1 Voltage', unit: 'V', color: '#f59f00', decimals: 2, axis: 'yVoltage' },
-        { key: 'ch2_voltage', label: 'CH2 Voltage', unit: 'V', color: '#fab005', decimals: 2, axis: 'yVoltage' },
-        { key: 'ch3_voltage', label: 'CH3 Voltage', unit: 'V', color: '#ffd43b', decimals: 2, axis: 'yVoltage' },
-        { key: 'ch1_current', label: 'CH1 Current', unit: 'mA', color: '#845ef7', decimals: 1, axis: 'yCurrent' },
-        { key: 'ch2_current', label: 'CH2 Current', unit: 'mA', color: '#be4bdb', decimals: 1, axis: 'yCurrent' },
-        { key: 'ch3_current', label: 'CH3 Current', unit: 'mA', color: '#e64980', decimals: 1, axis: 'yCurrent' }
+        { key: 'ch1_voltage', label: 'CH1 Voltage', unit: 'V', color: '#f59f00', decimals: 2, axis: 'yVoltage', hideWhenZero: true },
+        { key: 'ch2_voltage', label: 'CH2 Voltage', unit: 'V', color: '#fab005', decimals: 2, axis: 'yVoltage', hideWhenZero: true },
+        { key: 'ch3_voltage', label: 'CH3 Voltage', unit: 'V', color: '#ffd43b', decimals: 2, axis: 'yVoltage', hideWhenZero: true },
+        { key: 'ch1_current', label: 'CH1 Current', unit: 'mA', color: '#845ef7', decimals: 1, axis: 'yCurrent', hideWhenZero: true },
+        { key: 'ch2_current', label: 'CH2 Current', unit: 'mA', color: '#be4bdb', decimals: 1, axis: 'yCurrent', hideWhenZero: true },
+        { key: 'ch3_current', label: 'CH3 Current', unit: 'mA', color: '#e64980', decimals: 1, axis: 'yCurrent', hideWhenZero: true }
     ];
 
     const mainTelemetryMetricKeys = new Set([
@@ -1240,6 +1240,14 @@ document.addEventListener('DOMContentLoaded', function() {
             return;
         }
         card.style.display = visible ? '' : 'none';
+    }
+
+    function isUnusedPowerMetricValue(metric, value) {
+        if (!metric || !metric.hideWhenZero) {
+            return false;
+        }
+        const numericValue = Number.parseFloat(value);
+        return Number.isFinite(numericValue) && numericValue === 0;
     }
 
     function formatMetricValue(metricKey, value, decimals, unit) {
@@ -1505,7 +1513,9 @@ document.addEventListener('DOMContentLoaded', function() {
 
             const hasData = telemetryMetrics.some(metric => {
                 const series = data.series ? data.series[metric.key] : [];
-                return Array.isArray(series) && series.length > 0;
+                return Array.isArray(series) && series.some(point => (
+                    point && !isUnusedPowerMetricValue(metric, point.value)
+                ));
             });
 
             if (!hasData) {
@@ -1531,10 +1541,12 @@ document.addEventListener('DOMContentLoaded', function() {
                     const points = (data.series && data.series[metric.key]) || [];
                     return {
                         label: metric.label,
-                        data: points.map(point => ({
-                            x: point.timestamp * 1000,
-                            y: point.value
-                        })),
+                        data: points
+                            .filter(point => point && !isUnusedPowerMetricValue(metric, point.value))
+                            .map(point => ({
+                                x: point.timestamp * 1000,
+                                y: point.value
+                            })),
                         borderColor: metric.color,
                         backgroundColor: `${metric.color}55`,
                         tension: 0.25,
