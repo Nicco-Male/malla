@@ -681,6 +681,35 @@ def normalize_voltage(raw_voltage: float) -> float:
     return raw_voltage / 1000.0 if raw_voltage > 100 else raw_voltage
 
 
+def _protobuf_field_value(message: Any, field_name: str) -> float | None:
+    """Return a numeric protobuf field only when it is explicitly populated."""
+    try:
+        has_field = message.HasField(field_name)
+    except (AttributeError, ValueError):
+        has_field = hasattr(message, field_name)
+
+    if not has_field:
+        return None
+
+    value = getattr(message, field_name, None)
+    if value is None:
+        return None
+
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def extract_power_metrics_voltage(power_metrics: Any) -> float | None:
+    """Extract fallback voltage from power metrics channel voltage fields."""
+    for field_name in ("ch1_voltage", "ch2_voltage", "ch3_voltage"):
+        value = _protobuf_field_value(power_metrics, field_name)
+        if value is not None and value > 0:
+            return normalize_voltage(value)
+    return None
+
+
 def get_gateway_display_name(gateway_hex_id: str) -> str:
     """Get the best display name for a gateway hex ID, using cache if available."""
     if not gateway_hex_id:
@@ -1209,7 +1238,6 @@ def on_message(client: mqtt.Client, userdata: Any, msg: mqtt.MQTTMessage) -> Non
     processed_successfully = False
     parsing_error = None
     message_type = None
-    span = None
     span_cm = TRACER.start_as_current_span(
         "mqtt.on_message",
         attributes={
@@ -1523,6 +1551,11 @@ def on_message(client: mqtt.Client, userdata: Any, msg: mqtt.MQTTMessage) -> Non
                 voltage_value = None
                 channel_utilization_value = None
                 air_util_tx_value = None
+                power_metrics = (
+                    telemetry_data.power_metrics
+                    if telemetry_data.HasField("power_metrics")
+                    else None
+                )
 
                 if env_metrics:
                     if env_metrics.HasField("temperature"):
@@ -1548,6 +1581,9 @@ def on_message(client: mqtt.Client, userdata: Any, msg: mqtt.MQTTMessage) -> Non
                         )
                     if device_metrics.HasField("air_util_tx"):
                         air_util_tx_value = float(device_metrics.air_util_tx)
+
+                if voltage_value is None and power_metrics:
+                    voltage_value = extract_power_metrics_voltage(power_metrics)
 
                 conn = get_db_connection()
                 cursor = conn.cursor()
