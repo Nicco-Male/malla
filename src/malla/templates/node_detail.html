@@ -385,6 +385,15 @@
                     <div class="chart-container" id="telemetryHistoryChartContainer" style="position: relative; height: 320px;">
                         <canvas id="telemetryHistoryChart"></canvas>
                     </div>
+                    <div id="powerTelemetryHistorySection" class="mt-4 d-none">
+                        <div class="d-flex align-items-center justify-content-between mb-2">
+                            <h6 class="mb-0"><i class="bi bi-lightning-charge"></i> Power channel telemetry</h6>
+                            <small class="text-muted">CH1/CH2/CH3 voltage and current</small>
+                        </div>
+                        <div class="chart-container" id="powerTelemetryHistoryChartContainer" style="position: relative; height: 320px;">
+                            <canvas id="powerTelemetryHistoryChart"></canvas>
+                        </div>
+                    </div>
                 </div>
             </div>
 
@@ -1142,6 +1151,8 @@ document.addEventListener('DOMContentLoaded', function() {
     const telemetryFrom = document.getElementById('telemetryFrom');
     const telemetryTo = document.getElementById('telemetryTo');
     const chartContainer = document.getElementById('telemetryHistoryChartContainer');
+    const powerChartSection = document.getElementById('powerTelemetryHistorySection');
+    const powerChartContainer = document.getElementById('powerTelemetryHistoryChartContainer');
     const telemetrySection = document.getElementById('telemetryHistorySection');
 
     if (!nodeId || !telemetryRange || !chartContainer) {
@@ -1154,16 +1165,40 @@ document.addEventListener('DOMContentLoaded', function() {
         success: computedStyle.getPropertyValue('--bs-success').trim() || '#198754',
         warning: computedStyle.getPropertyValue('--bs-warning').trim() || '#ffc107',
         info: computedStyle.getPropertyValue('--bs-info').trim() || '#0dcaf0',
-        danger: computedStyle.getPropertyValue('--bs-danger').trim() || '#dc3545'
+        danger: computedStyle.getPropertyValue('--bs-danger').trim() || '#dc3545',
+        secondary: computedStyle.getPropertyValue('--bs-secondary').trim() || '#6c757d',
+        dark: computedStyle.getPropertyValue('--bs-dark').trim() || '#212529'
     };
 
     const telemetryMetrics = [
-        { key: 'temperature', label: 'Temperature', unit: '°C', color: palette.danger, decimals: 1 },
-        { key: 'humidity', label: 'Humidity', unit: '%', color: palette.info, decimals: 1 },
-        { key: 'pressure', label: 'Pressure', unit: 'hPa', color: palette.primary, decimals: 1 },
-        { key: 'battery_level', label: 'Battery', unit: '%', color: palette.success, decimals: 0 },
-        { key: 'voltage', label: 'Voltage', unit: 'V', color: palette.warning, decimals: 2 }
+        { key: 'temperature', label: 'Temperature', unit: '°C', color: palette.danger, decimals: 1, axis: 'yMain' },
+        { key: 'humidity', label: 'Humidity', unit: '%', color: palette.info, decimals: 1, axis: 'yMain' },
+        { key: 'pressure', label: 'Pressure', unit: 'hPa', color: palette.primary, decimals: 1, axis: 'yMain' },
+        { key: 'battery_level', label: 'Battery', unit: '%', color: palette.success, decimals: 0, axis: 'yMain' },
+        { key: 'voltage', label: 'Voltage', unit: 'V', color: palette.warning, decimals: 2, axis: 'yVoltage' },
+        { key: 'ch1_voltage', label: 'CH1 Voltage', unit: 'V', color: '#f59f00', decimals: 2, axis: 'yVoltage' },
+        { key: 'ch2_voltage', label: 'CH2 Voltage', unit: 'V', color: '#fab005', decimals: 2, axis: 'yVoltage' },
+        { key: 'ch3_voltage', label: 'CH3 Voltage', unit: 'V', color: '#ffd43b', decimals: 2, axis: 'yVoltage' },
+        { key: 'ch1_current', label: 'CH1 Current', unit: 'mA', color: '#845ef7', decimals: 1, axis: 'yCurrent' },
+        { key: 'ch2_current', label: 'CH2 Current', unit: 'mA', color: '#be4bdb', decimals: 1, axis: 'yCurrent' },
+        { key: 'ch3_current', label: 'CH3 Current', unit: 'mA', color: '#e64980', decimals: 1, axis: 'yCurrent' }
     ];
+
+    const mainTelemetryMetricKeys = new Set([
+        'temperature',
+        'humidity',
+        'pressure',
+        'battery_level',
+        'voltage'
+    ]);
+    const powerTelemetryMetricKeys = new Set([
+        'ch1_voltage',
+        'ch2_voltage',
+        'ch3_voltage',
+        'ch1_current',
+        'ch2_current',
+        'ch3_current'
+    ]);
 
     const telemetryStatElements = {
         temperature: {
@@ -1189,7 +1224,8 @@ document.addEventListener('DOMContentLoaded', function() {
     };
 
     const telemetryChartState = {
-        chart: null
+        chart: null,
+        powerChart: null
     };
 
     const telemetryConditionalCards = {
@@ -1256,6 +1292,13 @@ document.addEventListener('DOMContentLoaded', function() {
             telemetryChartState.chart.destroy();
             telemetryChartState.chart = null;
         }
+        if (telemetryChartState.powerChart) {
+            telemetryChartState.powerChart.destroy();
+            telemetryChartState.powerChart = null;
+        }
+        if (powerChartSection) {
+            powerChartSection.classList.add('d-none');
+        }
         chartContainer.innerHTML = `
             <div class="d-flex align-items-center justify-content-center h-100 text-muted">
                 ${message}
@@ -1275,8 +1318,22 @@ document.addEventListener('DOMContentLoaded', function() {
             telemetryChartState.chart.destroy();
             telemetryChartState.chart = null;
         }
+        if (telemetryChartState.powerChart) {
+            telemetryChartState.powerChart.destroy();
+            telemetryChartState.powerChart = null;
+        }
         chartContainer.innerHTML = '<canvas id="telemetryHistoryChart"></canvas>';
-        return document.getElementById('telemetryHistoryChart');
+        if (powerChartContainer) {
+            powerChartContainer.innerHTML = '<canvas id="powerTelemetryHistoryChart"></canvas>';
+        }
+        if (powerChartSection) {
+            powerChartSection.classList.add('d-none');
+        }
+        return {
+            telemetryCanvas: document.getElementById('telemetryHistoryChart'),
+            powerCanvas: document.getElementById('powerTelemetryHistoryChart'),
+            powerSection: powerChartSection
+        };
     }
 
     function formatTimestamp(value) {
@@ -1458,8 +1515,8 @@ document.addEventListener('DOMContentLoaded', function() {
 
             setTelemetryVisibility(true);
 
-            const canvas = resetTelemetryChartContainer();
-            if (!canvas) {
+            const chartElements = resetTelemetryChartContainer();
+            if (!chartElements.telemetryCanvas) {
                 return;
             }
 
@@ -1468,7 +1525,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 return;
             }
 
-            const datasets = telemetryMetrics
+            const buildDatasets = (metricFilter) => telemetryMetrics
+                .filter(metric => metricFilter.has(metric.key))
                 .map(metric => {
                     const points = (data.series && data.series[metric.key]) || [];
                     return {
@@ -1482,70 +1540,145 @@ document.addEventListener('DOMContentLoaded', function() {
                         tension: 0.25,
                         fill: false,
                         pointRadius: 2,
-                        yAxisID: metric.key === 'voltage' ? 'yVoltage' : 'yMain'
+                        yAxisID: metric.axis || 'yMain'
                     };
                 })
                 .filter(dataset => dataset.data.length > 0);
 
-            const ctx = canvas.getContext('2d');
-            telemetryChartState.chart = new Chart(ctx, {
-                type: 'line',
-                data: { datasets },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: {
-                        legend: { position: 'bottom' },
-                        tooltip: {
-                            callbacks: {
-                                title: (items) => {
-                                    if (!items.length) return '';
-                                    return formatTimestamp(items[0].parsed.x);
-                                },
-                                label: (context) => {
-                                    const metric = telemetryMetrics.find(
-                                        item => item.label === context.dataset.label
-                                    );
-                                    if (!metric) {
-                                        return `${context.dataset.label}: ${context.parsed.y}`;
+            const datasets = buildDatasets(mainTelemetryMetricKeys);
+            const powerDatasets = buildDatasets(powerTelemetryMetricKeys);
+
+            if (datasets.length > 0) {
+                const ctx = chartElements.telemetryCanvas.getContext('2d');
+                telemetryChartState.chart = new Chart(ctx, {
+                    type: 'line',
+                    data: { datasets },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: { position: 'bottom' },
+                            tooltip: {
+                                callbacks: {
+                                    title: (items) => {
+                                        if (!items.length) return '';
+                                        return formatTimestamp(items[0].parsed.x);
+                                    },
+                                    label: (context) => {
+                                        const metric = telemetryMetrics.find(
+                                            item => item.label === context.dataset.label
+                                        );
+                                        if (!metric) {
+                                            return `${context.dataset.label}: ${context.parsed.y}`;
+                                        }
+                                        const formatted = formatMetricValue(
+                                            metric.key,
+                                            context.parsed.y,
+                                            metric.decimals,
+                                            metric.unit
+                                        );
+                                        return `${metric.label}: ${formatted}`;
                                     }
-                                    const formatted = formatMetricValue(
-                                        metric.key,
-                                        context.parsed.y,
-                                        metric.decimals,
-                                        metric.unit
-                                    );
-                                    return `${metric.label}: ${formatted}`;
+                                }
+                            }
+                        },
+                        scales: {
+                            x: {
+                                type: 'linear',
+                                ticks: {
+                                    callback: (value) => formatTimestamp(value)
+                                }
+                            },
+                            yMain: {
+                                type: 'linear',
+                                position: 'left',
+                                beginAtZero: false
+                            },
+                            yVoltage: {
+                                type: 'linear',
+                                position: 'right',
+                                beginAtZero: false,
+                                grid: {
+                                    drawOnChartArea: false
+                                },
+                                ticks: {
+                                    callback: (value) => `${Number(value).toFixed(2)}V`
                                 }
                             }
                         }
-                    },
-                    scales: {
-                        x: {
-                            type: 'linear',
-                            ticks: {
-                                callback: (value) => formatTimestamp(value)
+                    }
+                });
+            }
+
+            if (powerDatasets.length > 0 && chartElements.powerCanvas && chartElements.powerSection) {
+                chartElements.powerSection.classList.remove('d-none');
+                const powerCtx = chartElements.powerCanvas.getContext('2d');
+                telemetryChartState.powerChart = new Chart(powerCtx, {
+                    type: 'line',
+                    data: { datasets: powerDatasets },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: { position: 'bottom' },
+                            title: {
+                                display: true,
+                                text: 'Power channel telemetry'
+                            },
+                            tooltip: {
+                                callbacks: {
+                                    title: (items) => {
+                                        if (!items.length) return '';
+                                        return formatTimestamp(items[0].parsed.x);
+                                    },
+                                    label: (context) => {
+                                        const metric = telemetryMetrics.find(
+                                            item => item.label === context.dataset.label
+                                        );
+                                        if (!metric) {
+                                            return `${context.dataset.label}: ${context.parsed.y}`;
+                                        }
+                                        const formatted = formatMetricValue(
+                                            metric.key,
+                                            context.parsed.y,
+                                            metric.decimals,
+                                            metric.unit
+                                        );
+                                        return `${metric.label}: ${formatted}`;
+                                    }
+                                }
                             }
                         },
-                        yMain: {
-                            type: 'linear',
-                            position: 'left',
-                            beginAtZero: false
-                        },
-                        yVoltage: {
-                            type: 'linear',
-                            position: 'right',
-                            beginAtZero: false,
-                            grid: {
-                                drawOnChartArea: false
+                        scales: {
+                            x: {
+                                type: 'linear',
+                                ticks: {
+                                    callback: (value) => formatTimestamp(value)
+                                }
                             },
-                            ticks: {
-                                callback: (value) => `${Number(value).toFixed(2)}V`
+                            yVoltage: {
+                                type: 'linear',
+                                position: 'left',
+                                beginAtZero: false,
+                                ticks: {
+                                    callback: (value) => `${Number(value).toFixed(2)}V`
+                                }
+                            },
+                            yCurrent: {
+                                type: 'linear',
+                                position: 'right',
+                                beginAtZero: false,
+                                grid: {
+                                    drawOnChartArea: false
+                                },
+                                ticks: {
+                                    callback: (value) => `${Number(value).toFixed(1)}mA`
+                                }
                             }
                         }
                     }
-                }
-            });
+                });
+            }
         } catch (error) {
             console.error('Error loading telemetry history:', error);
             showTelemetryMessage('Error loading telemetry history.');

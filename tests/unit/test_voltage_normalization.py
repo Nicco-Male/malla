@@ -45,3 +45,22 @@ def test_power_metrics_voltage_skips_zero_channels() -> None:
     power_metrics = _FakePowerMetrics(ch1_voltage=0.0, ch2_voltage=5520.0)
 
     assert AnalyticsService._extract_power_metrics_voltage(power_metrics) == 5.52
+
+
+def test_power_metrics_channel_metrics_include_voltage_and_current() -> None:
+    power_metrics = _FakePowerMetrics(
+        ch1_voltage=3728.0,
+        ch1_current=15.2,
+        ch2_voltage=5.52,
+        ch2_current=-1.5,
+        ch3_voltage=0.0,
+        ch3_current=0.0,
+    )
+
+    assert AnalyticsService._extract_power_metrics_channel_metrics(power_metrics) == {
+        "ch1_voltage": 3.728,
+        "ch1_current": 15.2,
+        "ch2_voltage": 5.52,
+        "ch2_current": -1.5,
+        "ch3_current": 0.0,
+    }

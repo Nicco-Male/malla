@@ -64,11 +64,37 @@ class AnalyticsService:
         and instead report voltage under power_metrics.ch*_voltage. Use the first
         positive channel voltage as a fallback for the node voltage series.
         """
+        channel_metrics = AnalyticsService._extract_power_metrics_channel_metrics(
+            power_metrics
+        )
         for field_name in ("ch1_voltage", "ch2_voltage", "ch3_voltage"):
-            value = AnalyticsService._protobuf_field_value(power_metrics, field_name)
+            value = channel_metrics.get(field_name)
             if value is not None and value > 0:
-                return AnalyticsService._normalize_voltage(value)
+                return value
         return None
+
+    @staticmethod
+    def _extract_power_metrics_channel_metrics(
+        power_metrics: Any,
+    ) -> dict[str, float]:
+        """Extract per-channel voltage and current values from power metrics."""
+        metrics: dict[str, float] = {}
+        for channel in (1, 2, 3):
+            voltage_field = f"ch{channel}_voltage"
+            voltage = AnalyticsService._protobuf_field_value(
+                power_metrics, voltage_field
+            )
+            if voltage is not None and voltage > 0:
+                metrics[voltage_field] = AnalyticsService._normalize_voltage(voltage)
+
+            current_field = f"ch{channel}_current"
+            current = AnalyticsService._protobuf_field_value(
+                power_metrics, current_field
+            )
+            if current is not None:
+                metrics[current_field] = current
+
+        return metrics
 
     @staticmethod
     def _decode_telemetry_payload(
@@ -115,12 +141,15 @@ class AnalyticsService:
                     float(device_metrics.voltage)
                 )
 
-        if "voltage" not in metrics and telemetry.HasField("power_metrics"):
-            voltage = AnalyticsService._extract_power_metrics_voltage(
-                telemetry.power_metrics
+        if telemetry.HasField("power_metrics"):
+            power_metrics = telemetry.power_metrics
+            metrics.update(
+                AnalyticsService._extract_power_metrics_channel_metrics(power_metrics)
             )
-            if voltage is not None:
-                metrics["voltage"] = voltage
+            if "voltage" not in metrics:
+                voltage = AnalyticsService._extract_power_metrics_voltage(power_metrics)
+                if voltage is not None:
+                    metrics["voltage"] = voltage
 
         return metrics
 
@@ -172,6 +201,12 @@ class AnalyticsService:
             "pressure",
             "battery_level",
             "voltage",
+            "ch1_voltage",
+            "ch2_voltage",
+            "ch3_voltage",
+            "ch1_current",
+            "ch2_current",
+            "ch3_current",
         ]
         series: dict[str, list[dict[str, float]]] = {key: [] for key in metric_keys}
         stats_totals: dict[str, dict[str, float]] = {
