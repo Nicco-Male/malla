@@ -385,6 +385,15 @@
                     <div class="chart-container" id="telemetryHistoryChartContainer" style="position: relative; height: 320px;">
                         <canvas id="telemetryHistoryChart"></canvas>
                     </div>
+                    <div id="powerTelemetryHistorySection" class="mt-4 d-none">
+                        <div class="d-flex align-items-center justify-content-between mb-2">
+                            <h6 class="mb-0"><i class="bi bi-lightning-charge"></i> Power channel telemetry</h6>
+                            <small class="text-muted">CH1/CH2/CH3 voltage and current</small>
+                        </div>
+                        <div class="chart-container" id="powerTelemetryHistoryChartContainer" style="position: relative; height: 320px;">
+                            <canvas id="powerTelemetryHistoryChart"></canvas>
+                        </div>
+                    </div>
                 </div>
             </div>
 
@@ -1142,6 +1151,8 @@ document.addEventListener('DOMContentLoaded', function() {
     const telemetryFrom = document.getElementById('telemetryFrom');
     const telemetryTo = document.getElementById('telemetryTo');
     const chartContainer = document.getElementById('telemetryHistoryChartContainer');
+    const powerChartSection = document.getElementById('powerTelemetryHistorySection');
+    const powerChartContainer = document.getElementById('powerTelemetryHistoryChartContainer');
     const telemetrySection = document.getElementById('telemetryHistorySection');
 
     if (!nodeId || !telemetryRange || !chartContainer) {
@@ -1285,6 +1296,9 @@ document.addEventListener('DOMContentLoaded', function() {
             telemetryChartState.powerChart.destroy();
             telemetryChartState.powerChart = null;
         }
+        if (powerChartSection) {
+            powerChartSection.classList.add('d-none');
+        }
         chartContainer.innerHTML = `
             <div class="d-flex align-items-center justify-content-center h-100 text-muted">
                 ${message}
@@ -1308,21 +1322,17 @@ document.addEventListener('DOMContentLoaded', function() {
             telemetryChartState.powerChart.destroy();
             telemetryChartState.powerChart = null;
         }
-        chartContainer.innerHTML = `
-            <div class="h-100 d-flex flex-column gap-3">
-                <div id="telemetryChartWrapper" class="flex-fill min-vh-0">
-                    <canvas id="telemetryHistoryChart"></canvas>
-                </div>
-                <div id="powerTelemetryChartWrapper" class="flex-fill min-vh-0 d-none">
-                    <canvas id="powerTelemetryHistoryChart"></canvas>
-                </div>
-            </div>
-        `;
+        chartContainer.innerHTML = '<canvas id="telemetryHistoryChart"></canvas>';
+        if (powerChartContainer) {
+            powerChartContainer.innerHTML = '<canvas id="powerTelemetryHistoryChart"></canvas>';
+        }
+        if (powerChartSection) {
+            powerChartSection.classList.add('d-none');
+        }
         return {
             telemetryCanvas: document.getElementById('telemetryHistoryChart'),
-            telemetryWrapper: document.getElementById('telemetryChartWrapper'),
             powerCanvas: document.getElementById('powerTelemetryHistoryChart'),
-            powerWrapper: document.getElementById('powerTelemetryChartWrapper')
+            powerSection: powerChartSection
         };
     }
 
@@ -1538,8 +1548,7 @@ document.addEventListener('DOMContentLoaded', function() {
             const datasets = buildDatasets(mainTelemetryMetricKeys);
             const powerDatasets = buildDatasets(powerTelemetryMetricKeys);
 
-            if (datasets.length > 0 && chartElements.telemetryWrapper) {
-                chartElements.telemetryWrapper.classList.remove('d-none');
+            if (datasets.length > 0) {
                 const ctx = chartElements.telemetryCanvas.getContext('2d');
                 telemetryChartState.chart = new Chart(ctx, {
                     type: 'line',
@@ -1599,12 +1608,10 @@ document.addEventListener('DOMContentLoaded', function() {
                         }
                     }
                 });
-            } else if (chartElements.telemetryWrapper) {
-                chartElements.telemetryWrapper.classList.add('d-none');
             }
 
-            if (powerDatasets.length > 0 && chartElements.powerCanvas && chartElements.powerWrapper) {
-                chartElements.powerWrapper.classList.remove('d-none');
+            if (powerDatasets.length > 0 && chartElements.powerCanvas && chartElements.powerSection) {
+                chartElements.powerSection.classList.remove('d-none');
                 const powerCtx = chartElements.powerCanvas.getContext('2d');
                 telemetryChartState.powerChart = new Chart(powerCtx, {
                     type: 'line',
@@ -1667,17 +1674,6 @@ document.addEventListener('DOMContentLoaded', function() {
                                 ticks: {
                                     callback: (value) => `${Number(value).toFixed(1)}mA`
                                 }
-                            }
-                        },
-                        yCurrent: {
-                            type: 'linear',
-                            position: 'right',
-                            beginAtZero: false,
-                            grid: {
-                                drawOnChartArea: false
-                            },
-                            ticks: {
-                                callback: (value) => `${Number(value).toFixed(1)}mA`
                             }
                         }
                     }
