@@ -2679,6 +2679,12 @@ def api_node_location_history(node_id):
 def api_node_telemetry_history(node_id):
     """API endpoint for telemetry history for a node."""
     logger.info(f"API node telemetry history endpoint accessed for node {node_id}")
+    from_param = None
+    to_param = None
+    hours = None
+    bucket_param = None
+    start_ts = None
+    end_ts = None
     try:
         node_id_int = convert_node_id(node_id)
 
@@ -2735,9 +2741,20 @@ def api_node_telemetry_history(node_id):
         return safe_jsonify(history)
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
-    except Exception as e:
-        logger.error(f"Error in API node telemetry history: {e}")
-        return jsonify({"error": str(e)}), 500
+    except Exception:
+        logger.exception(
+            "Error in API node telemetry history: "
+            "node_id=%s from_param=%s to_param=%s hours=%s bucket_param=%s "
+            "start_ts=%s end_ts=%s",
+            node_id,
+            from_param,
+            to_param,
+            hours,
+            bucket_param,
+            start_ts,
+            end_ts,
+        )
+        return jsonify({"error": "Failed to load telemetry history"}), 500
 
 
 @api_bp.route("/node/<node_id>/direct-receptions")
