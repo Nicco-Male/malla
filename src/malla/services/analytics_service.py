@@ -175,12 +175,23 @@ class AnalyticsService:
               AND ph.raw_payload IS NOT NULL
             ORDER BY ph.timestamp ASC
         """
+        availability_query = """
+            SELECT
+                MIN(ph.timestamp) AS first_available,
+                MAX(ph.timestamp) AS last_available
+            FROM packet_history ph
+            WHERE ph.from_node_id = %s
+              AND ph.portnum_name = 'TELEMETRY_APP'
+              AND ph.raw_payload IS NOT NULL
+        """
 
         conn = None
         cursor = None
         try:
             conn = get_db_connection()
             cursor = conn.cursor(cursor_factory=RealDictCursor)
+            cursor.execute(availability_query, (node_id,))
+            availability_row = cursor.fetchone() or {}
             cursor.execute(query, (node_id, start_timestamp, end_timestamp))
             rows = cursor.fetchall() or []
         finally:
@@ -285,11 +296,18 @@ class AnalyticsService:
                     "count": 0,
                 }
 
+        first_available = availability_row.get("first_available")
+        last_available = availability_row.get("last_available")
+
         return {
             "node_id": node_id,
             "from": start_timestamp,
             "to": end_timestamp,
             "bucket": bucket_seconds,
+            "available_from": (
+                float(first_available) if first_available is not None else None
+            ),
+            "available_to": float(last_available) if last_available is not None else None,
             "series": series,
             "stats": stats_summary,
         }
