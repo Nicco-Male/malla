@@ -1383,6 +1383,37 @@ document.addEventListener('DOMContentLoaded', function() {
         return new Date(value).toLocaleString();
     }
 
+    function formatAvailabilityDate(timestampSeconds) {
+        const date = new Date(timestampSeconds * 1000);
+        if (Number.isNaN(date.getTime())) {
+            return '';
+        }
+        return new Intl.DateTimeFormat('it-IT', {
+            day: '2-digit',
+            month: '2-digit',
+            year: 'numeric'
+        }).format(date);
+    }
+
+    function updateTelemetryAvailabilityMessage(data) {
+        if (!telemetryMessage) {
+            return;
+        }
+        const requestedFrom = Number(data && data.from);
+        const availableFrom = Number(data && data.available_from);
+        if (!Number.isFinite(requestedFrom) || !Number.isFinite(availableFrom) || availableFrom <= requestedFrom) {
+            telemetryMessage.classList.add('d-none');
+            telemetryMessage.textContent = '';
+            return;
+        }
+
+        const formattedDate = formatAvailabilityDate(availableFrom);
+        telemetryMessage.textContent = formattedDate
+            ? `Only data from ${formattedDate} available.`
+            : 'Only partial data is available for the selected range.';
+        telemetryMessage.classList.remove('d-none');
+    }
+
     function resolveAutoBucket(hours) {
         if (hours <= 24) {
             return '5m';
@@ -1391,7 +1422,7 @@ document.addEventListener('DOMContentLoaded', function() {
             return '1h';
         }
         if (hours <= 720) {
-            return '6h';
+            return '1h';
         }
         return '1d';
     }
@@ -1542,6 +1573,7 @@ document.addEventListener('DOMContentLoaded', function() {
             }
 
             updateTelemetryStats(data.stats || {});
+            updateTelemetryAvailabilityMessage(data);
 
             const hasData = telemetryMetrics.some(metric => {
                 const series = data.series ? data.series[metric.key] : [];
