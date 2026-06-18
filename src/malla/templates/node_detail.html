@@ -369,7 +369,7 @@
                                 </div>
                             </div>
                         </div>
-                        <div class="col-sm-6 col-lg-4">
+                        <div class="col-sm-6 col-lg-4" id="telemetryCardBattery">
                             <div class="card card-metric h-100">
                                 <div class="card-body">
                                     <div class="metric-value" id="telemetryAvgBattery">-</div>
@@ -1240,6 +1240,10 @@ document.addEventListener('DOMContentLoaded', function() {
         pressure: document.getElementById('telemetryCardPressure')
     };
 
+    const telemetrySupportedStateCards = {
+        battery_level: document.getElementById('telemetryCardBattery')
+    };
+
     function setMetricVisibility(metricKey, visible) {
         const card = telemetryConditionalCards[metricKey];
         if (!card) {
@@ -1296,21 +1300,48 @@ document.addEventListener('DOMContentLoaded', function() {
         return lines;
     }
 
-    function updateTelemetryStats(stats) {
+    function isMetricSupported(metricKey, availability) {
+        if (!availability || !Object.prototype.hasOwnProperty.call(availability, metricKey)) {
+            return true;
+        }
+        return Boolean(availability[metricKey] && availability[metricKey].supported);
+    }
+
+    function setSupportedStateCardVisibility(metricKey, visible) {
+        const card = telemetrySupportedStateCards[metricKey];
+        if (!card) {
+            return;
+        }
+        card.style.display = visible ? '' : 'none';
+    }
+
+    function updateTelemetryStats(stats, availability = {}) {
         telemetryMetrics.forEach(metric => {
             const elements = telemetryStatElements[metric.key];
             if (!elements) {
                 return;
             }
             const metricStats = stats ? stats[metric.key] : null;
+            const metricIsSupported = isMetricSupported(metric.key, availability);
+
+            if (!metricIsSupported) {
+                setMetricVisibility(metric.key, false);
+                setSupportedStateCardVisibility(metric.key, true);
+                elements.avg.textContent = 'Not available';
+                elements.range.textContent = '';
+                return;
+            }
+
             if (!metricStats || !metricStats.count) {
-                elements.avg.textContent = '-';
+                elements.avg.textContent = 'No data in selected range';
                 elements.range.textContent = 'Min/Max: -';
                 setMetricVisibility(metric.key, false);
+                setSupportedStateCardVisibility(metric.key, true);
                 return;
             }
 
             setMetricVisibility(metric.key, true);
+            setSupportedStateCardVisibility(metric.key, true);
             elements.avg.textContent = formatMetricValue(
                 metric.key,
                 metricStats.avg,
@@ -1629,7 +1660,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 throw new Error(data.error || 'Failed to load telemetry history');
             }
 
-            updateTelemetryStats(data.stats || {});
+            updateTelemetryStats(data.stats || {}, data.metric_availability || {});
             updateTelemetryAvailabilityMessage(data);
 
             const hasData = telemetryMetrics.some(metric => {
@@ -1640,7 +1671,13 @@ document.addEventListener('DOMContentLoaded', function() {
             });
 
             if (!hasData) {
-                setTelemetryVisibility(false);
+                const hasSupportedTelemetry = telemetryMetrics.some(metric => (
+                    isMetricSupported(metric.key, data.metric_availability || {})
+                ));
+                setTelemetryVisibility(hasSupportedTelemetry);
+                if (hasSupportedTelemetry) {
+                    showTelemetryMessage('No data in selected range.');
+                }
                 return;
             }
 
