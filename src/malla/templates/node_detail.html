@@ -1154,15 +1154,23 @@ document.addEventListener('DOMContentLoaded', function() {
         success: computedStyle.getPropertyValue('--bs-success').trim() || '#198754',
         warning: computedStyle.getPropertyValue('--bs-warning').trim() || '#ffc107',
         info: computedStyle.getPropertyValue('--bs-info').trim() || '#0dcaf0',
-        danger: computedStyle.getPropertyValue('--bs-danger').trim() || '#dc3545'
+        danger: computedStyle.getPropertyValue('--bs-danger').trim() || '#dc3545',
+        secondary: computedStyle.getPropertyValue('--bs-secondary').trim() || '#6c757d',
+        dark: computedStyle.getPropertyValue('--bs-dark').trim() || '#212529'
     };
 
     const telemetryMetrics = [
-        { key: 'temperature', label: 'Temperature', unit: '°C', color: palette.danger, decimals: 1 },
-        { key: 'humidity', label: 'Humidity', unit: '%', color: palette.info, decimals: 1 },
-        { key: 'pressure', label: 'Pressure', unit: 'hPa', color: palette.primary, decimals: 1 },
-        { key: 'battery_level', label: 'Battery', unit: '%', color: palette.success, decimals: 0 },
-        { key: 'voltage', label: 'Voltage', unit: 'V', color: palette.warning, decimals: 2 }
+        { key: 'temperature', label: 'Temperature', unit: '°C', color: palette.danger, decimals: 1, axis: 'yMain' },
+        { key: 'humidity', label: 'Humidity', unit: '%', color: palette.info, decimals: 1, axis: 'yMain' },
+        { key: 'pressure', label: 'Pressure', unit: 'hPa', color: palette.primary, decimals: 1, axis: 'yMain' },
+        { key: 'battery_level', label: 'Battery', unit: '%', color: palette.success, decimals: 0, axis: 'yMain' },
+        { key: 'voltage', label: 'Voltage', unit: 'V', color: palette.warning, decimals: 2, axis: 'yVoltage' },
+        { key: 'ch1_voltage', label: 'CH1 Voltage', unit: 'V', color: '#f59f00', decimals: 2, axis: 'yVoltage' },
+        { key: 'ch2_voltage', label: 'CH2 Voltage', unit: 'V', color: '#fab005', decimals: 2, axis: 'yVoltage' },
+        { key: 'ch3_voltage', label: 'CH3 Voltage', unit: 'V', color: '#ffd43b', decimals: 2, axis: 'yVoltage' },
+        { key: 'ch1_current', label: 'CH1 Current', unit: 'mA', color: '#845ef7', decimals: 1, axis: 'yCurrent' },
+        { key: 'ch2_current', label: 'CH2 Current', unit: 'mA', color: '#be4bdb', decimals: 1, axis: 'yCurrent' },
+        { key: 'ch3_current', label: 'CH3 Current', unit: 'mA', color: '#e64980', decimals: 1, axis: 'yCurrent' }
     ];
 
     const telemetryStatElements = {
@@ -1482,7 +1490,7 @@ document.addEventListener('DOMContentLoaded', function() {
                         tension: 0.25,
                         fill: false,
                         pointRadius: 2,
-                        yAxisID: metric.key === 'voltage' ? 'yVoltage' : 'yMain'
+                        yAxisID: metric.axis || 'yMain'
                     };
                 })
                 .filter(dataset => dataset.data.length > 0);
@@ -1541,6 +1549,17 @@ document.addEventListener('DOMContentLoaded', function() {
                             },
                             ticks: {
                                 callback: (value) => `${Number(value).toFixed(2)}V`
+                            }
+                        },
+                        yCurrent: {
+                            type: 'linear',
+                            position: 'right',
+                            beginAtZero: false,
+                            grid: {
+                                drawOnChartArea: false
+                            },
+                            ticks: {
+                                callback: (value) => `${Number(value).toFixed(1)}mA`
                             }
                         }
                     }
