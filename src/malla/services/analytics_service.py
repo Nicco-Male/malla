@@ -241,13 +241,22 @@ class AnalyticsService:
                 bucket_metrics = bucketed.setdefault(bucket_timestamp, {})
                 for key, value in metrics.items():
                     bucket_entry = bucket_metrics.setdefault(
-                        key, {"sum": 0.0, "count": 0.0}
+                        key, AnalyticsService._empty_bucket_entry()
                     )
-                    bucket_entry["sum"] += float(value)
-                    bucket_entry["count"] += 1
+                    AnalyticsService._add_bucket_value(bucket_entry, float(value))
             else:
                 for key, value in metrics.items():
-                    series[key].append({"timestamp": timestamp, "value": float(value)})
+                    float_value = float(value)
+                    series[key].append(
+                        {
+                            "timestamp": timestamp,
+                            "value": float_value,
+                            "avg": float_value,
+                            "min": float_value,
+                            "max": float_value,
+                            "count": 1,
+                        }
+                    )
 
         if bucket_seconds:
             for bucket_timestamp in sorted(bucketed.keys()):
@@ -256,10 +265,7 @@ class AnalyticsService:
                     if data["count"] <= 0:
                         continue
                     series[key].append(
-                        {
-                            "timestamp": float(bucket_timestamp),
-                            "value": data["sum"] / data["count"],
-                        }
+                        AnalyticsService._bucket_point(float(bucket_timestamp), data)
                     )
 
         stats_summary: dict[str, dict[str, float | int | None]] = {}
@@ -286,6 +292,36 @@ class AnalyticsService:
             "bucket": bucket_seconds,
             "series": series,
             "stats": stats_summary,
+        }
+
+
+    @staticmethod
+    def _empty_bucket_entry() -> dict[str, float]:
+        return {
+            "sum": 0.0,
+            "count": 0.0,
+            "min": float("inf"),
+            "max": float("-inf"),
+        }
+
+    @staticmethod
+    def _add_bucket_value(bucket_entry: dict[str, float], value: float) -> None:
+        bucket_entry["sum"] += value
+        bucket_entry["count"] += 1
+        bucket_entry["min"] = min(bucket_entry["min"], value)
+        bucket_entry["max"] = max(bucket_entry["max"], value)
+
+    @staticmethod
+    def _bucket_point(timestamp: float, data: dict[str, float]) -> dict[str, float]:
+        count = data["count"]
+        avg = data["sum"] / count
+        return {
+            "timestamp": float(timestamp),
+            "value": avg,
+            "avg": avg,
+            "min": data["min"],
+            "max": data["max"],
+            "count": int(count),
         }
 
     @staticmethod

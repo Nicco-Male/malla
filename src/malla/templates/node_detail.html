@@ -1251,11 +1251,43 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     function formatMetricValue(metricKey, value, decimals, unit) {
-        if (value === null || value === undefined || Number.isNaN(value)) {
+        const numericValue = Number.parseFloat(value);
+        if (value === null || value === undefined || Number.isNaN(numericValue)) {
             return '-';
         }
-        const rounded = Number.parseFloat(value).toFixed(decimals);
+        const rounded = numericValue.toFixed(decimals);
         return `${rounded}${unit}`;
+    }
+
+    function isVoltageSpike(metric, point) {
+        if (!metric || metric.axis !== 'yVoltage' || !point) {
+            return false;
+        }
+        const maxValue = Number.parseFloat(point.max ?? point.value);
+        return Number.isFinite(maxValue) && maxValue >= 4.20;
+    }
+
+    function formatTelemetryTooltip(metric, point, parsedValue) {
+        if (!metric) {
+            return [];
+        }
+
+        const lines = [
+            `${metric.label}: ${formatMetricValue(metric.key, parsedValue, metric.decimals, metric.unit)}`
+        ];
+
+        const count = Number.parseInt(point && point.count, 10);
+        if (Number.isFinite(count) && count > 1) {
+            lines[0] = `${metric.label} avg: ${formatMetricValue(metric.key, point.avg ?? parsedValue, metric.decimals, metric.unit)}`;
+            lines.push(`Min/Max: ${formatMetricValue(metric.key, point.min, metric.decimals, metric.unit)} / ${formatMetricValue(metric.key, point.max, metric.decimals, metric.unit)}`);
+            lines.push(`Samples: ${count}`);
+        }
+
+        if (isVoltageSpike(metric, point)) {
+            lines.push(`Spike max: ${formatMetricValue(metric.key, point.max ?? parsedValue, metric.decimals, metric.unit)}`);
+        }
+
+        return lines;
     }
 
     function updateTelemetryStats(stats) {
@@ -1545,13 +1577,20 @@ document.addEventListener('DOMContentLoaded', function() {
                             .filter(point => point && !isUnusedPowerMetricValue(metric, point.value))
                             .map(point => ({
                                 x: point.timestamp * 1000,
-                                y: point.value
+                                y: point.value,
+                                avg: point.avg ?? point.value,
+                                min: point.min ?? point.value,
+                                max: point.max ?? point.value,
+                                count: point.count || 1,
+                                spike: isVoltageSpike(metric, point)
                             })),
                         borderColor: metric.color,
                         backgroundColor: `${metric.color}55`,
                         tension: 0.25,
                         fill: false,
-                        pointRadius: 2,
+                        pointRadius: (context) => context.raw && context.raw.spike ? 5 : 2,
+                        pointStyle: (context) => context.raw && context.raw.spike ? 'triangle' : 'circle',
+                        pointBackgroundColor: (context) => context.raw && context.raw.spike ? palette.danger : metric.color,
                         yAxisID: metric.axis || 'yMain'
                     };
                 })
@@ -1583,13 +1622,7 @@ document.addEventListener('DOMContentLoaded', function() {
                                         if (!metric) {
                                             return `${context.dataset.label}: ${context.parsed.y}`;
                                         }
-                                        const formatted = formatMetricValue(
-                                            metric.key,
-                                            context.parsed.y,
-                                            metric.decimals,
-                                            metric.unit
-                                        );
-                                        return `${metric.label}: ${formatted}`;
+                                        return formatTelemetryTooltip(metric, context.raw, context.parsed.y);
                                     }
                                 }
                             }
@@ -1650,13 +1683,7 @@ document.addEventListener('DOMContentLoaded', function() {
                                         if (!metric) {
                                             return `${context.dataset.label}: ${context.parsed.y}`;
                                         }
-                                        const formatted = formatMetricValue(
-                                            metric.key,
-                                            context.parsed.y,
-                                            metric.decimals,
-                                            metric.unit
-                                        );
-                                        return `${metric.label}: ${formatted}`;
+                                        return formatTelemetryTooltip(metric, context.raw, context.parsed.y);
                                     }
                                 }
                             }
