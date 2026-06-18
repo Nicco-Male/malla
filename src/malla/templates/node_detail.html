@@ -388,6 +388,7 @@
                             </div>
                         </div>
                     </div>
+                    <div id="telemetryMessage" class="alert alert-info py-2 d-none" role="status"></div>
                     <div class="chart-container" id="telemetryHistoryChartContainer" style="position: relative; height: 320px;">
                         <canvas id="telemetryHistoryChart"></canvas>
                     </div>
@@ -1160,6 +1161,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const powerChartSection = document.getElementById('powerTelemetryHistorySection');
     const powerChartContainer = document.getElementById('powerTelemetryHistoryChartContainer');
     const telemetrySection = document.getElementById('telemetryHistorySection');
+    const telemetryMessage = document.getElementById('telemetryMessage');
 
     if (!nodeId || !telemetryRange || !chartContainer) {
         return;
