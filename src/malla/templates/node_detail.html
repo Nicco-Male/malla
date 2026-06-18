@@ -44,6 +44,12 @@
         font-size: 0.75rem;
     }
     .matrix-table td { text-align: center; }
+    @media (max-width: 576px) {
+        #telemetryHistoryChartContainer,
+        #powerTelemetryHistoryChartContainer {
+            height: 280px !important;
+        }
+    }
 </style>
 {% endblock %}
 
@@ -1383,6 +1389,57 @@ document.addEventListener('DOMContentLoaded', function() {
         return new Date(value).toLocaleString();
     }
 
+    function getTelemetryRangeHours() {
+        const selectedRange = getSelectedRange();
+        return selectedRange ? selectedRange.hours : 24;
+    }
+
+    function formatTelemetryAxisTimestamp(value, rangeHours) {
+        const date = new Date(value);
+        if (Number.isNaN(date.getTime())) {
+            return '';
+        }
+
+        if (rangeHours <= 24) {
+            return new Intl.DateTimeFormat('it-IT', {
+                hour: '2-digit',
+                minute: '2-digit',
+                hour12: false
+            }).format(date);
+        }
+
+        if (rangeHours <= 168) {
+            return new Intl.DateTimeFormat('it-IT', {
+                day: '2-digit',
+                month: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit',
+                hour12: false
+            }).format(date);
+        }
+
+        return new Intl.DateTimeFormat('it-IT', {
+            day: '2-digit',
+            month: '2-digit'
+        }).format(date);
+    }
+
+    function getTelemetryXAxisOptions(rangeHours) {
+        const isSmallViewport = window.matchMedia('(max-width: 576px)').matches;
+        const maxTicksLimit = isSmallViewport ? 4 : (rangeHours <= 24 ? 6 : 7);
+
+        return {
+            type: 'linear',
+            ticks: {
+                maxTicksLimit,
+                autoSkip: true,
+                maxRotation: isSmallViewport ? 25 : 0,
+                minRotation: 0,
+                callback: (value) => formatTelemetryAxisTimestamp(value, rangeHours)
+            }
+        };
+    }
+
     function formatAvailabilityDate(timestampSeconds) {
         const date = new Date(timestampSeconds * 1000);
         if (Number.isNaN(date.getTime())) {
@@ -1630,6 +1687,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
             const datasets = buildDatasets(mainTelemetryMetricKeys);
             const powerDatasets = buildDatasets(powerTelemetryMetricKeys);
+            const xAxisOptions = getTelemetryXAxisOptions(getTelemetryRangeHours());
 
             if (datasets.length > 0) {
                 const ctx = chartElements.telemetryCanvas.getContext('2d');
@@ -1661,10 +1719,7 @@ document.addEventListener('DOMContentLoaded', function() {
                         },
                         scales: {
                             x: {
-                                type: 'linear',
-                                ticks: {
-                                    callback: (value) => formatTimestamp(value)
-                                }
+                                ...xAxisOptions
                             },
                             yTemperature: {
                                 type: 'linear',
@@ -1769,10 +1824,7 @@ document.addEventListener('DOMContentLoaded', function() {
                         },
                         scales: {
                             x: {
-                                type: 'linear',
-                                ticks: {
-                                    callback: (value) => formatTimestamp(value)
-                                }
+                                ...xAxisOptions
                             },
                             yVoltage: {
                                 type: 'linear',
