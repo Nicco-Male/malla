@@ -184,6 +184,16 @@ class AnalyticsService:
               AND ph.portnum_name = 'TELEMETRY_APP'
               AND ph.raw_payload IS NOT NULL
         """
+        support_query = """
+            SELECT
+                ph.timestamp,
+                ph.raw_payload
+            FROM packet_history ph
+            WHERE ph.from_node_id = %s
+              AND ph.portnum_name = 'TELEMETRY_APP'
+              AND ph.raw_payload IS NOT NULL
+            ORDER BY ph.timestamp ASC
+        """
 
         conn = None
         cursor = None
@@ -192,6 +202,8 @@ class AnalyticsService:
             cursor = conn.cursor(cursor_factory=RealDictCursor)
             cursor.execute(availability_query, (node_id,))
             availability_row = cursor.fetchone() or {}
+            cursor.execute(support_query, (node_id,))
+            support_rows = cursor.fetchall() or []
             cursor.execute(query, (node_id, start_timestamp, end_timestamp))
             rows = cursor.fetchall() or []
         finally:
@@ -224,6 +236,34 @@ class AnalyticsService:
             key: {"sum": 0.0, "min": float("inf"), "max": float("-inf"), "count": 0}
             for key in metric_keys
         }
+
+        metric_availability: dict[str, dict[str, float | bool | None]] = {
+            key: {"supported": False, "first_seen": None, "last_seen": None}
+            for key in metric_keys
+        }
+        for row in support_rows:
+            raw_payload = row.get("raw_payload")
+            if not raw_payload:
+                continue
+
+            metrics = AnalyticsService._decode_telemetry_payload(raw_payload)
+            if not metrics:
+                continue
+
+            timestamp = float(row["timestamp"])
+            for key in metrics.keys():
+                if key not in metric_availability:
+                    continue
+                availability = metric_availability[key]
+                availability["supported"] = True
+                first_seen = availability["first_seen"]
+                last_seen = availability["last_seen"]
+                availability["first_seen"] = (
+                    timestamp if first_seen is None else min(float(first_seen), timestamp)
+                )
+                availability["last_seen"] = (
+                    timestamp if last_seen is None else max(float(last_seen), timestamp)
+                )
 
         bucketed: dict[int, dict[str, dict[str, float]]] = {}
 
@@ -310,6 +350,7 @@ class AnalyticsService:
             "available_to": float(last_available) if last_available is not None else None,
             "series": series,
             "stats": stats_summary,
+            "metric_availability": metric_availability,
         }
 
 
