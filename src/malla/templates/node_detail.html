@@ -1171,10 +1171,10 @@ document.addEventListener('DOMContentLoaded', function() {
     };
 
     const telemetryMetrics = [
-        { key: 'temperature', label: 'Temperature', unit: '°C', color: palette.danger, decimals: 1, axis: 'yMain' },
-        { key: 'humidity', label: 'Humidity', unit: '%', color: palette.info, decimals: 1, axis: 'yMain' },
-        { key: 'pressure', label: 'Pressure', unit: 'hPa', color: palette.primary, decimals: 1, axis: 'yMain' },
-        { key: 'battery_level', label: 'Battery', unit: '%', color: palette.success, decimals: 0, axis: 'yMain' },
+        { key: 'temperature', label: 'Temperature', unit: '°C', color: palette.danger, decimals: 1, axis: 'yTemperature' },
+        { key: 'humidity', label: 'Humidity', unit: '%', color: palette.info, decimals: 1, axis: 'yPercent' },
+        { key: 'pressure', label: 'Pressure', unit: 'hPa', color: palette.primary, decimals: 1, axis: 'yPressure' },
+        { key: 'battery_level', label: 'Battery', unit: '%', color: palette.success, decimals: 0, axis: 'yPercent' },
         { key: 'voltage', label: 'Voltage', unit: 'V', color: palette.warning, decimals: 2, axis: 'yVoltage' },
         { key: 'ch1_voltage', label: 'CH1 Voltage', unit: 'V', color: '#f59f00', decimals: 2, axis: 'yVoltage', hideWhenZero: true },
         { key: 'ch2_voltage', label: 'CH2 Voltage', unit: 'V', color: '#fab005', decimals: 2, axis: 'yVoltage', hideWhenZero: true },
@@ -1666,15 +1666,62 @@ document.addEventListener('DOMContentLoaded', function() {
                                     callback: (value) => formatTimestamp(value)
                                 }
                             },
-                            yMain: {
+                            yTemperature: {
                                 type: 'linear',
+                                display: 'auto',
                                 position: 'left',
-                                beginAtZero: false
+                                beginAtZero: false,
+                                title: {
+                                    display: true,
+                                    text: 'Temperature (°C)'
+                                },
+                                ticks: {
+                                    callback: (value) => `${Number(value).toFixed(1)}°C`
+                                }
+                            },
+                            yPercent: {
+                                type: 'linear',
+                                display: 'auto',
+                                position: 'right',
+                                beginAtZero: true,
+                                title: {
+                                    display: true,
+                                    text: 'Humidity / Battery (%)'
+                                },
+                                grid: {
+                                    drawOnChartArea: false
+                                },
+                                ticks: {
+                                    callback: (value) => `${Number(value).toFixed(0)}%`
+                                }
+                            },
+                            yPressure: {
+                                type: 'linear',
+                                display: 'auto',
+                                position: 'left',
+                                beginAtZero: false,
+                                offset: true,
+                                title: {
+                                    display: true,
+                                    text: 'Pressure (hPa)'
+                                },
+                                grid: {
+                                    drawOnChartArea: false
+                                },
+                                ticks: {
+                                    callback: (value) => `${Number(value).toFixed(1)} hPa`
+                                }
                             },
                             yVoltage: {
                                 type: 'linear',
+                                display: 'auto',
                                 position: 'right',
                                 beginAtZero: false,
+                                offset: true,
+                                title: {
+                                    display: true,
+                                    text: 'Voltage (V)'
+                                },
                                 grid: {
                                     drawOnChartArea: false
                                 },
@@ -1731,6 +1778,10 @@ document.addEventListener('DOMContentLoaded', function() {
                                 type: 'linear',
                                 position: 'left',
                                 beginAtZero: false,
+                                title: {
+                                    display: true,
+                                    text: 'Voltage (V)'
+                                },
                                 ticks: {
                                     callback: (value) => `${Number(value).toFixed(2)}V`
                                 }
@@ -1739,6 +1790,10 @@ document.addEventListener('DOMContentLoaded', function() {
                                 type: 'linear',
                                 position: 'right',
                                 beginAtZero: false,
+                                title: {
+                                    display: true,
+                                    text: 'Current (mA)'
+                                },
                                 grid: {
                                     drawOnChartArea: false
                                 },
