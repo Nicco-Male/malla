@@ -64,3 +64,20 @@ def test_power_metrics_channel_metrics_include_voltage_and_current() -> None:
         "ch2_current": -1.5,
         "ch3_current": 0.0,
     }
+
+
+def test_voltage_bucket_point_keeps_aggregate_metadata_for_spike_tooltips() -> None:
+    bucket = AnalyticsService._empty_bucket_entry()
+    AnalyticsService._add_bucket_value(bucket, 3.7)
+    AnalyticsService._add_bucket_value(bucket, 4.2)
+
+    point = AnalyticsService._bucket_point(1000.0, bucket)
+
+    assert point == {
+        "timestamp": 1000.0,
+        "value": 3.95,
+        "avg": 3.95,
+        "min": 3.7,
+        "max": 4.2,
+        "count": 2,
+    }
