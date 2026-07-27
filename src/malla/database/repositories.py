@@ -2023,15 +2023,8 @@ class NodeRepository:
         conn = None
         if cursor is None:
             conn = get_db_connection()
-            cursor = None
-            try:
-                cursor = conn.cursor(cursor_factory=RealDictCursor)
-                should_close = True
-    
-            finally:
-                if cursor:
-                    cursor.close()
-                put_db_connection(conn)
+            cursor = conn.cursor(cursor_factory=RealDictCursor)
+            should_close = True
         try:
             if not gateway_node_ids or not relay_last_bytes:
                 return {}
@@ -2066,7 +2059,7 @@ class NodeRepository:
                     FROM packet_history p
                     WHERE p.from_node_id IN ({gw_id_placeholders})
                         AND p.gateway_id IS NOT NULL
-                        AND p.gateway_id LIKE '!%'
+                        AND p.gateway_id LIKE '!%%'
                         AND (p.hop_start - p.hop_limit) = 0
                     """
 
