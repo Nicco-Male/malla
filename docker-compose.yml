@@ -17,7 +17,7 @@ services:
 
   malla-web:
     build: .
-    image: malla-n30nex:local
+    image: ${MALLA_IMAGE:-malla-n30nex:local}
 
     # Choose between Flask dev server and Gunicorn
     # Default: Flask development server (malla-web)
@@ -91,7 +91,7 @@ services:
       # - ./config.yaml:/app/config.yaml:ro
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:9100/metrics').read()"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:${MALLA_METRICS_PORT:-9100}/metrics').read()"]
       interval: 30s
       timeout: 10s
       retries: 3
