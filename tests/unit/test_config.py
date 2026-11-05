@@ -54,3 +54,17 @@ def test_telemetry_min_retention_env_override(monkeypatch):
     cfg = load_config(config_path=None)
 
     assert cfg.telemetry_min_retention_hours == 1440
+
+
+def test_get_ignored_node_ids_parsing():
+    """Ensure ignored_node_ids parses decimal and hex formats correctly."""
+    config = AppConfig(
+        ignored_node_ids="1127955948, !433b3dec, 433b3dec, 0x1a2b, invalid"
+    )
+
+    ignored_ids = config.get_ignored_node_ids()
+
+    assert 1127955948 in ignored_ids  # decimal
+    assert int("433b3dec", 16) in ignored_ids  # hex without prefix
+    assert int("1a2b", 16) in ignored_ids  # hex with 0x prefix
+    assert len(ignored_ids) == 2
