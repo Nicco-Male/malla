@@ -379,10 +379,7 @@ def _migration_packet_indexes(cursor: Any) -> None:
            WHERE relay_node IS NOT NULL AND relay_node != 0""",
         "CREATE INDEX IF NOT EXISTS idx_packet_mesh_id ON packet_history(mesh_packet_id)",
         "CREATE INDEX IF NOT EXISTS idx_node_hex_id ON node_info(hex_id)",
-        # Legacy/Duplicate indexes (kept for compatibility or if names differ)
-        "CREATE INDEX IF NOT EXISTS idx_packet_channel_id ON packet_history(channel_id)",
-        "CREATE INDEX IF NOT EXISTS idx_packet_gateway_id ON packet_history(gateway_id)",
-        "CREATE INDEX IF NOT EXISTS idx_packet_to_node ON packet_history(to_node_id)",
+        # Keep the portnum index: its leading column differs from the composite index.
         "CREATE INDEX IF NOT EXISTS idx_packet_portnum_name ON packet_history(portnum_name)",
     ]
 

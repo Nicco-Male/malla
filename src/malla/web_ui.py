@@ -221,6 +221,7 @@ def create_app(cfg: AppConfig | None = None):  # noqa: D401
 
         return {
             "APP_NAME": cfg.name,
+            "CARTO_API_KEY": os.getenv("MALLA_CARTO_API_KEY", ""),
             "APP_CONFIG": cfg,
             "DATABASE_FILE": cfg.database_file,
             "DATABASE_TARGET": describe_database_target(cfg),
@@ -235,8 +236,11 @@ def create_app(cfg: AppConfig | None = None):  # noqa: D401
     start_cache_cleanup()
 
     # Start longest links precaching
-    logger.info("Starting longest links precache background thread")
-    start_precache()
+    if os.getenv("MALLA_LONGEST_LINKS_PRECACHE_ENABLED", "true").lower() in ("true", "1", "yes", "on"):
+        logger.info("Starting longest links precache background thread")
+        start_precache()
+    else:
+        logger.info("Longest links background precache disabled")
 
     # Register cleanup on app shutdown
     atexit.register(stop_cache_cleanup)

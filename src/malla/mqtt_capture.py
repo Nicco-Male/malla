@@ -110,7 +110,54 @@ DATABASE_FILE: str = _cfg.database_file
 
 # Decryption keys for secondary channels (optional)
 # Supports multiple comma-separated keys
-DECRYPTION_KEYS: list[str] = _cfg.get_decryption_keys()
+def _normalize_decryption_keys(encoded_keys: list[str]) -> list[str]:
+    """Validate and expand Meshtastic PSKs before MQTT processing."""
+    import binascii
+
+    default_psk = bytes.fromhex(
+        "d4f1bb3a20290759f0bcffabcf4e6901"
+    )
+    valid_keys = []
+
+    for index, encoded in enumerate(encoded_keys, start=1):
+        try:
+            raw = base64.b64decode(encoded, validate=True)
+        except (binascii.Error, ValueError):
+            logging.warning("Skipping malformed Base64 key #%d", index)
+            continue
+
+        if len(raw) == 1:
+            if raw[0] == 0:
+                logging.info("Skipping unencrypted PSK #%d", index)
+                continue
+            # Meshtastic one-byte shorthand: default AES-128 PSK.
+            raw = default_psk[:-1] + bytes([raw[0]])
+
+        elif 1 < len(raw) < 16:
+            raw = raw.ljust(16, b"\x00")
+        elif 16 < len(raw) < 32:
+            raw = raw.ljust(32, b"\x00")
+        elif len(raw) not in (16, 32):
+            logging.warning(
+                "Skipping invalid AES key #%d: %d bytes",
+                index, len(raw)
+            )
+            continue
+
+        valid_keys.append(
+            base64.b64encode(raw).decode("ascii")
+        )
+
+    logging.info(
+        "Valid Meshtastic decryption keys: %d/%d",
+        len(valid_keys), len(encoded_keys)
+    )
+    return valid_keys
+
+
+DECRYPTION_KEYS: list[str] = _normalize_decryption_keys(
+    _cfg.get_decryption_keys()
+)
 
 # Ignored node IDs - packets from these nodes will be dropped
 IGNORED_NODE_IDS: set[int] = _cfg.get_ignored_node_ids()
@@ -1169,7 +1216,10 @@ def get_node_statistics() -> dict[str, Any]:
             active_nodes_24h = cursor.fetchone()["count"]
 
             # Total packets received
-            cursor.execute("SELECT COUNT(*) as count FROM packet_history")
+            cursor.execute(
+                "SELECT GREATEST(reltuples, 0)::bigint AS count "
+                "FROM pg_class WHERE oid = 'packet_history'::regclass"
+            )
             total_packets = cursor.fetchone()["count"]
 
             return {
@@ -1649,18 +1699,18 @@ def on_message(client: mqtt.Client, userdata: Any, msg: mqtt.MQTTMessage) -> Non
             # Handle MAP_REPORT_APP packets - extract Position data similar to POSITION_APP
             try:
                 # MapReport packets contain Position messages
-                position_data = mesh_pb2.Position()
-                position_data.ParseFromString(mesh_packet.decoded.payload)
+                map_report = mqtt_pb2.MapReport()
+                map_report.ParseFromString(mesh_packet.decoded.payload)
 
                 lat = (
-                    position_data.latitude_i / 1e7 if position_data.latitude_i else None
+                    map_report.latitude_i / 1e7 if map_report.latitude_i else None
                 )
                 lon = (
-                    position_data.longitude_i / 1e7
-                    if position_data.longitude_i
+                    map_report.longitude_i / 1e7
+                    if map_report.longitude_i
                     else None
                 )
-                alt = position_data.altitude if position_data.altitude else None
+                alt = map_report.altitude if map_report.altitude else None
 
                 from_node_display = get_node_display_name(from_node_id_numeric)
                 via_mqtt_str = (

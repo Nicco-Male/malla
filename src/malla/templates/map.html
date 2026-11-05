@@ -749,6 +749,11 @@ controls_section, stats_section, legend_section, sidebar_styles %}
         });
     }
 
+    const cartoApiKey = {{ CARTO_API_KEY | tojson }};
+    const cartoQuery = cartoApiKey
+        ? "?key=" + encodeURIComponent(cartoApiKey)
+        : "";
+
     // Map tile layers for different themes
     let lightTileLayer, darkTileLayer, currentTileLayer;
 
@@ -758,13 +763,13 @@ controls_section, stats_section, legend_section, sidebar_styles %}
         map = L.map('map').setView([40.0, -95.0], 4);
 
         // Create light and dark tile layers
-        lightTileLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+        lightTileLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png' + cartoQuery, {
             attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors © <a href="https://carto.com/attributions">CARTO</a>',
             subdomains: 'abcd',
             maxZoom: 20
         });
 
-        darkTileLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+        darkTileLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png' + cartoQuery, {
             attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors © <a href="https://carto.com/attributions">CARTO</a>',
             subdomains: 'abcd',
             maxZoom: 20
