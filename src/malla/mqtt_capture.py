@@ -76,6 +76,7 @@ from malla.config import (  # Import here to avoid circular import issues
 from malla.database.connection import get_db_connection, put_db_connection
 from malla.exceptions import DatabaseError
 from malla.logging_utils import setup_logging
+from malla.utils.mqtt_dedup import RecentMQTTMessages
 from malla.telemetry import setup_telemetry
 
 # Load the singleton configuration once at module import time.  This ensures the
@@ -256,11 +257,25 @@ class LRUNodeCache:
 NODE_CACHE_MAX_SIZE = int(os.getenv("MALLA_NODE_CACHE_MAX_SIZE", "10000"))
 node_cache = LRUNodeCache(max_size=NODE_CACHE_MAX_SIZE)
 
+# Compare exact MQTT envelopes, not packet IDs (which can be reused).
+# 10 minutes covers the observed repeated upstream replay batches.
+MQTT_DEDUP_WINDOW_SECONDS = max(
+    0, int(os.getenv("MALLA_MQTT_DEDUP_WINDOW_SECONDS", "600"))
+)
+MQTT_DEDUP_MAX_ENTRIES = max(
+    1, int(os.getenv("MALLA_MQTT_DEDUP_MAX_ENTRIES", "100000"))
+)
+recent_mqtt_messages = RecentMQTTMessages(
+    window_seconds=MQTT_DEDUP_WINDOW_SECONDS,
+    max_entries=MQTT_DEDUP_MAX_ENTRIES,
+)
+
 cleanup_thread: threading.Thread | None = None  # Background thread for data cleanup
 stop_cleanup = threading.Event()  # Event to signal cleanup thread to stop
 ingest_stats_lock = threading.Lock()
 ingest_stats = {
     "received": 0,
+    "duplicate": 0,
     "parsed_ok": 0,
     "parse_failed": 0,
     "decrypt_success": 0,
@@ -275,6 +290,7 @@ _metrics_registered = False
 def _init_metrics():
     """Initialize Prometheus metrics once per process."""
     global _metrics_registered, PACKETS_RECEIVED, PACKETS_PARSED, PACKETS_PARSE_FAILED
+    global PACKETS_DUPLICATE
     global PACKETS_DECRYPT_SUCCESS, PACKETS_DECRYPT_FAILED, ACTIVE_THREADS
     global DB_QUERY_DURATION, PACKET_PROCESS_DURATION, CLEANUP_FAILURES
     global \
@@ -288,6 +304,10 @@ def _init_metrics():
         return
 
     PACKETS_RECEIVED = Counter("malla_packets_received_total", "MQTT messages received")
+    PACKETS_DUPLICATE = Counter(
+        "malla_packets_duplicate_total",
+        "MQTT messages skipped after an identical topic and payload were persisted",
+    )
     PACKETS_PARSED = Counter(
         "malla_packets_parsed_total", "Packets parsed successfully"
     )
@@ -1320,6 +1340,18 @@ def on_message(client: mqtt.Client, userdata: Any, msg: mqtt.MQTTMessage) -> Non
                 span.set_attribute("malla.packet.skipped", True)
             return
 
+        # Drop only byte-identical messages already persisted recently. Keep the
+        # raw receive counter above, but avoid redundant protobuf/DB work.
+        packet_fingerprint = recent_mqtt_messages.fingerprint(msg.topic, msg.payload)
+        if recent_mqtt_messages.contains(packet_fingerprint):
+            with ingest_stats_lock:
+                ingest_stats["duplicate"] += 1
+            PACKETS_DUPLICATE.inc()
+            if span is not None:
+                span.set_attribute("malla.packet.skipped", True)
+                span.set_attribute("malla.packet.skip_reason", "duplicate")
+            return
+
         logging.debug(f"Processing protobuf message on topic {msg.topic}")
 
         # Always store the raw message data first, regardless of parsing success
@@ -1815,6 +1847,8 @@ def on_message(client: mqtt.Client, userdata: Any, msg: mqtt.MQTTMessage) -> Non
                 parsing_error,
                 receive_time=receive_time,
             )
+            # Never suppress a retry for a packet that failed database insertion.
+            recent_mqtt_messages.remember(packet_fingerprint)
             # Record success metric per topic
             try:
                 TOPIC_PACKETS_SUCCESS.labels(topic=msg.topic).inc()
