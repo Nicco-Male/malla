@@ -1,0 +1,5 @@
+services:
+  malla-web:
+    image: malla-world:perf-20261105
+  malla-capture:
+    image: malla-world:perf-20261105

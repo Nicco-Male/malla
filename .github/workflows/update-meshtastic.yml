@@ -1,0 +1,41 @@
+name: Update Meshtastic Protobufs
+
+on:
+  schedule:
+    - cron: "31 4 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  update-protobufs:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v10.3.2
+
+      - name: Update Meshtastic dependency
+        run: uv lock --upgrade-package meshtastic
+
+      - name: Install dependencies
+        run: uv sync --locked --no-dev
+
+      - name: Verify protobuf compatibility
+        run: |
+          uv run --no-sync python -c "from meshtastic import mqtt_pb2, portnums_pb2; assert hasattr(mqtt_pb2, 'MapReport'); assert portnums_pb2.PortNum.Name(73) == 'MAP_REPORT_APP'"
+          uv run --no-sync python -m compileall -q src/malla
+
+      - name: Create update PR
+        uses: peter-evans/create-pull-request@v8.1.1
+        with:
+          branch: automation/meshtastic-protobufs
+          commit-message: "chore: update Meshtastic protobufs"
+          title: "Update Meshtastic protobufs"
+          body: "Automatic dependency update with protobuf compatibility checks."
+          add-paths: uv.lock

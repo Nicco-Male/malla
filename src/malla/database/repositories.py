@@ -10,7 +10,7 @@ import time
 from datetime import UTC, datetime
 from typing import Any
 
-from meshtastic import mesh_pb2
+from meshtastic import mesh_pb2, mqtt_pb2
 from psycopg2.extras import RealDictCursor
 
 from ..cache import cache_result
@@ -3679,7 +3679,7 @@ class LocationRepository:
                             precision_bits = getattr(position, "precision_bits", None)
                             sats_in_view = getattr(position, "sats_in_view", None)
                         elif row["portnum"] == 73:  # MAP_REPORT_APP
-                            map_report = mesh_pb2.MapReport()
+                            map_report = mqtt_pb2.MapReport()
                             map_report.ParseFromString(row["raw_payload"])
                             latitude_i = map_report.latitude_i
                             longitude_i = map_report.longitude_i

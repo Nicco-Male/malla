@@ -481,7 +481,10 @@
 <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
 <script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/uuid/9.0.1/uuidv4.min.js"></script>
-<script src="{{ url_for('static', filename='js/live-map.js') }}"></script>
+<script>
+window.MALLA_CARTO_API_KEY = {{ CARTO_API_KEY | tojson }};
+</script>
+<script src="{{ url_for('static', filename='js/live-map.js') }}?v=carto-20261105"></script>
 {% endblock %}
 
 {% block footer %}{% endblock %}
