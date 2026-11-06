@@ -151,11 +151,11 @@ controls_section, stats_section, legend_section, sidebar_styles %}
     <div class="sidebar-section">
         <h6><i class="bi bi-diagram-3"></i> Link Types</h6>
         <div class="form-check">
-            <input class="form-check-input" type="checkbox" id="tracerouteLinksCheckbox" checked>
+            <input class="form-check-input" type="checkbox" id="tracerouteLinksCheckbox">
             <label class="form-check-label" for="tracerouteLinksCheckbox">Traceroute Links</label>
         </div>
         <div class="form-check mt-1">
-            <input class="form-check-input" type="checkbox" id="packetLinksCheckbox" checked>
+            <input class="form-check-input" type="checkbox" id="packetLinksCheckbox">
             <label class="form-check-label" for="packetLinksCheckbox">Packet Links</label>
         </div>
     </div>
@@ -512,8 +512,8 @@ controls_section, stats_section, legend_section, sidebar_styles %}
     let allPacketLinks = [];
     let allLinkData = []; // Combined traceroute and packet links
     let selectedNodeId = null;
-    let showTracerouteLinks = true;
-    let showPacketLinks = true;
+    let showTracerouteLinks = false;
+    let showPacketLinks = false;
     let precisionCircle = null;
     let searchResults = [];
     let allNodes = [];
@@ -522,10 +522,15 @@ controls_section, stats_section, legend_section, sidebar_styles %}
     let currentHopDepth = 1; // max hop depth to display around selected node
     let heatmapLayer = null;
     let showHeatmap = false;
+    const NODE_LIST_RENDER_LIMIT = 100;
+    const MARKER_BATCH_SIZE = 150;
+    let markerRenderGeneration = 0;
+    const roleColorCache = new Map();
 
     // Update map theme based on current theme setting
     function updateMapTheme() {
         if (!map || !lightTileLayer || !darkTileLayer) return;
+        roleColorCache.clear();
 
         const isDark = document.documentElement.getAttribute('data-bs-theme') === 'dark';
         const newTileLayer = isDark ? darkTileLayer : lightTileLayer;
@@ -760,7 +765,7 @@ controls_section, stats_section, legend_section, sidebar_styles %}
     // Initialize the map
     function initMap() {
         // Create map centered on a default location (will be updated when data loads)
-        map = L.map('map').setView([40.0, -95.0], 4);
+        map = L.map('map', { preferCanvas: true }).setView([40.0, -95.0], 4);
 
         // Create light and dark tile layers
         lightTileLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png' + cartoQuery, {
@@ -781,6 +786,8 @@ controls_section, stats_section, legend_section, sidebar_styles %}
         // Initialize marker cluster group
         markerClusterGroup = L.markerClusterGroup({
             maxClusterRadius: 50, // Cluster markers within 50 pixels
+            animate: false,
+            removeOutsideVisibleBounds: true,
             spiderfyOnMaxZoom: true,
             showCoverageOnHover: true,
             zoomToBoundsOnClick: true,
@@ -1018,43 +1025,64 @@ controls_section, stats_section, legend_section, sidebar_styles %}
 
     // Update map display with filtered data
     function updateMapDisplay() {
-        // Update statistics
         updateStats();
-
-        // Clear existing markers
-        if (markerClusterGroup) {
-            markerClusterGroup.clearLayers();
-        }
-        nodeMarkers = [];
-
-        // Add markers for each filtered node
-        nodeData.forEach(node => {
-            addNodeMarker(node);
-        });
-
-        // Update unified node list
+        renderNodeMarkers(nodeData);
         showAllNodes();
 
-        // Load links if at least one type is enabled
+        // Always clear stale RF overlays, including when toggled off.
+        tracerouteLinks.forEach(link => map.removeLayer(link));
+        tracerouteLinks = [];
+        packetLinks.forEach(link => map.removeLayer(link));
+        packetLinks = [];
+
+        // RF overlays are opt-in on large world maps.
         if (showTracerouteLinks && tracerouteLinkData.length > 0) {
             drawTracerouteLinks();
         }
-
         if (showPacketLinks && packetLinkData.length > 0) {
             drawPacketLinks();
         }
 
-        // Fit map only on first render
-        if (firstDisplay && nodeMarkers.length > 0) {
-            setTimeout(() => {
-                fitMapToNodes();
-            }, 500);
+        if (firstDisplay && nodeData.length > 0) {
             firstDisplay = false;
+            // The complete dataset is available before markers finish rendering.
+            setTimeout(fitMapToNodes, 0);
         }
     }
 
+    // Build markers in small batches so the main thread can process user input.
+    // Renders from obsolete filters or selections are canceled by generation.
+    function renderNodeMarkers(nodes) {
+        const generation = ++markerRenderGeneration;
+        markerClusterGroup.clearLayers();
+        nodeMarkers = [];
+        let cursor = 0;
+
+        function addBatch() {
+            if (generation !== markerRenderGeneration) return;
+
+            const batch = [];
+            const end = Math.min(cursor + MARKER_BATCH_SIZE, nodes.length);
+            for (; cursor < end; cursor++) {
+                const node = nodes[cursor];
+                if (!Number.isFinite(Number(node.latitude)) ||
+                    !Number.isFinite(Number(node.longitude))) {
+                    continue;
+                }
+                const marker = createNodeMarker(node);
+                batch.push(marker);
+                nodeMarkers.push(marker);
+            }
+
+            if (batch.length) markerClusterGroup.addLayers(batch);
+            if (cursor < nodes.length) setTimeout(addBatch, 0);
+        }
+
+        addBatch();
+    }
+
     // Add a marker for a node
-    function addNodeMarker(node) {
+    function createNodeMarker(node) {
         // Create custom marker with role-based styling
         const roleColor = getRoleColor(node.role);
         const estimatedClass = node.estimated ? ' estimated' : '';
@@ -1086,16 +1114,14 @@ controls_section, stats_section, legend_section, sidebar_styles %}
         const marker = L.marker([node.latitude, node.longitude], { icon: markerIcon });
 
         // Create popup content
-        const popupContent = createNodePopupContent(node);
-        marker.bindPopup(popupContent);
+        marker.bindPopup(() => createNodePopupContent(node));
 
         // Add click handler
         marker.on('click', function () {
             selectNode(node);
         });
 
-        markerClusterGroup.addLayer(marker);
-        nodeMarkers.push(marker);
+        return marker;
     }
 
     // Create popup content for a node
@@ -1177,7 +1203,8 @@ controls_section, stats_section, legend_section, sidebar_styles %}
         }
 
         // Sort nodes by name
-        const sortedNodes = [...nodes].sort((a, b) => a.display_name.localeCompare(b.display_name));
+        const sortedNodes = nodes.slice(0, NODE_LIST_RENDER_LIMIT)
+            .sort((a, b) => a.display_name.localeCompare(b.display_name));
 
         container.innerHTML = sortedNodes.map(node => {
             const nodeIdHex = node.node_id.toString(16).padStart(8, '0');
@@ -1195,6 +1222,11 @@ controls_section, stats_section, legend_section, sidebar_styles %}
             </div>
         `;
         }).join('');
+
+        if (!isSearchResults && nodes.length > NODE_LIST_RENDER_LIMIT) {
+            container.insertAdjacentHTML('beforeend',
+                `<div class="small text-muted p-2">Showing first ${NODE_LIST_RENDER_LIMIT} of ${nodes.length} nodes. Use search to find others.</div>`);
+        }
 
         // Update selection highlighting
         updateNodeListSelection();
@@ -1357,7 +1389,8 @@ controls_section, stats_section, legend_section, sidebar_styles %}
         }
 
         // Sort nodes by name
-        const sortedNodes = [...nodeData].sort((a, b) => a.display_name.localeCompare(b.display_name));
+        const sortedNodes = nodeData.slice(0, NODE_LIST_RENDER_LIMIT)
+            .sort((a, b) => a.display_name.localeCompare(b.display_name));
 
         container.innerHTML = sortedNodes.map(node => {
             const nodeIdHex = node.node_id.toString(16).padStart(8, '0');
@@ -1469,20 +1502,23 @@ controls_section, stats_section, legend_section, sidebar_styles %}
     }
 
     function getRoleColor(role) {
-        // Get CSS custom property values from the document
-        const computedStyle = getComputedStyle(document.documentElement);
-
-        switch (role) {
-            case 'CLIENT': return computedStyle.getPropertyValue('--bs-primary').trim(); // Blue
-            case 'CLIENT_MUTE': return computedStyle.getPropertyValue('--bs-secondary').trim(); // Gray
-            case 'CLIENT_BASE': return computedStyle.getPropertyValue('--bs-secondary').trim(); // Gray
-            case 'ROUTER': return computedStyle.getPropertyValue('--bs-success').trim(); // Green
-            case 'ROUTER_LATE': return computedStyle.getPropertyValue('--bs-success').trim(); // Green (same as ROUTER)
-            case 'REPEATER': return computedStyle.getPropertyValue('--bs-warning').trim(); // Yellow
-            case 'ROUTER_CLIENT': return computedStyle.getPropertyValue('--bs-info').trim(); // Teal
-            case 'SENSOR': return computedStyle.getPropertyValue('--bs-sensor').trim(); // Pink
-            default: return computedStyle.getPropertyValue('--bs-danger').trim(); // Red for unknown/null roles
-        }
+        const key = role || 'UNKNOWN';
+        if (roleColorCache.has(key)) return roleColorCache.get(key);
+        const colorVars = {
+            CLIENT: '--bs-primary',
+            CLIENT_MUTE: '--bs-secondary',
+            CLIENT_BASE: '--bs-secondary',
+            ROUTER: '--bs-success',
+            ROUTER_LATE: '--bs-success',
+            REPEATER: '--bs-warning',
+            ROUTER_CLIENT: '--bs-info',
+            SENSOR: '--bs-sensor'
+        };
+        const cssVar = colorVars[role] || '--bs-danger';
+        const color = getComputedStyle(document.documentElement)
+            .getPropertyValue(cssVar).trim();
+        roleColorCache.set(key, color);
+        return color;
     }
 
     function formatRole(role) {
@@ -1502,12 +1538,11 @@ controls_section, stats_section, legend_section, sidebar_styles %}
 
     // Map control functions
     function fitMapToNodes() {
-        if (nodeMarkers.length === 0) {
-            return;
-        }
-
-        // Collect lat/lngs from markers
-        const latLngs = nodeMarkers.map(m => m.getLatLng());
+        // Use the complete data even while marker batches are still loading.
+        const latLngs = nodeData
+            .filter(n => Number.isFinite(Number(n.latitude)) && Number.isFinite(Number(n.longitude)))
+            .map(n => L.latLng(n.latitude, n.longitude));
+        if (latLngs.length === 0) return;
 
         // If we have enough markers, trim extreme outliers (top / bottom 2.5%)
         let bounds;
@@ -1667,8 +1702,7 @@ controls_section, stats_section, legend_section, sidebar_styles %}
             });
 
             // Add popup with link information
-            const popupContent = createLinkPopupContent(link);
-            line.bindPopup(popupContent);
+            line.bindPopup(() => createLinkPopupContent(link));
 
             line.addTo(map);
             tracerouteLinks.push(line);
@@ -1745,8 +1779,7 @@ controls_section, stats_section, legend_section, sidebar_styles %}
             });
 
             // Add popup with link information
-            const popupContent = createLinkPopupContent(link);
-            line.bindPopup(popupContent);
+            line.bindPopup(() => createLinkPopupContent(link));
 
             line.addTo(map);
             packetLinks.push(line);
@@ -1929,8 +1962,8 @@ controls_section, stats_section, legend_section, sidebar_styles %}
         packetLinks.forEach(l => map.removeLayer(l));
         packetLinks = [];
 
-        // Add markers
-        nodeData.forEach(addNodeMarker);
+        // Add markers without blocking the browser
+        renderNodeMarkers(nodeData);
 
         // Draw links restricted to visible nodes
         if (showTracerouteLinks) {
