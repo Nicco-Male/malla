@@ -1,5 +1,5 @@
 version = 1
-revision = 2
+revision = 5
 requires-python = ">=3.13"
 
 [[package]]
@@ -628,8 +628,8 @@ wheels = [
 
 [[package]]
 name = "meshtastic"
-version = "2.7.3"
-source = { git = "https://github.com/meshtastic/python#dcd077d85efd5aaa39a9f4a772ffbd117bff136c" }
+version = "2.7.11"
+source = { git = "https://github.com/meshtastic/python#0a1835760c2437314a2d3544bbdd8b6fead559bc" }
 dependencies = [
     { name = "bleak" },
     { name = "packaging" },
